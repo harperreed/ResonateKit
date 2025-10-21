@@ -38,10 +38,14 @@ public struct BinaryMessage: Sendable {
         self.type = type
 
         // Extract big-endian int64 from bytes 1-8
-        self.timestamp = data[1..<9].withUnsafeBytes { buffer in
+        let extractedTimestamp = data[1..<9].withUnsafeBytes { buffer in
             buffer.loadUnaligned(as: Int64.self).bigEndian
         }
 
+        // Validate timestamp is non-negative (server should never send negative)
+        guard extractedTimestamp >= 0 else { return nil }
+
+        self.timestamp = extractedTimestamp
         self.data = data.subdata(in: 9..<data.count)
     }
 }

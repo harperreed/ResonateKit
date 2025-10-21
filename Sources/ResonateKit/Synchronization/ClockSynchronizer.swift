@@ -58,4 +58,9 @@ public actor ClockSynchronizer {
     public func localTimeToServer(_ localTime: Int64) -> Int64 {
         return localTime + currentOffset
     }
+
+    /// Reset clock synchronization (e.g., after reconnection)
+    public func reset() {
+        offsetSamples.removeAll()
+    }
 }

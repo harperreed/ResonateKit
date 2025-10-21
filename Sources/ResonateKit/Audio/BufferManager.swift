@@ -40,4 +40,11 @@ public actor BufferManager {
     public var usage: Int {
         return bufferedBytes
     }
+
+    /// Clear all buffered chunks
+    /// Useful when restarting playback or handling stream discontinuities
+    public func clear() {
+        bufferedChunks.removeAll()
+        bufferedBytes = 0
+    }
 }

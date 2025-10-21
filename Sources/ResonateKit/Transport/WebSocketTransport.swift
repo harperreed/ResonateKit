@@ -26,7 +26,13 @@ public actor WebSocketTransport {
     }
 
     /// Connect to the WebSocket server
+    /// - Throws: TransportError if already connected
     public func connect() async throws {
+        // Prevent multiple connections
+        guard webSocket == nil else {
+            throw TransportError.alreadyConnected
+        }
+
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
         webSocket?.resume()
@@ -38,6 +44,11 @@ public actor WebSocketTransport {
                 group.addTask { await self.receiveBinaryMessages() }
             }
         }
+    }
+
+    /// Check if currently connected
+    public var isConnected: Bool {
+        return webSocket != nil
     }
 
     /// Send a text message (JSON)
@@ -82,7 +93,10 @@ public actor WebSocketTransport {
     }
 
     private func receiveTextMessages() async {
-        while let webSocket = webSocket {
+        // Check connection status on each iteration
+        while !Task.isCancelled {
+            guard let webSocket = webSocket else { break }
+
             do {
                 let message = try await webSocket.receive()
                 if case .string(let text) = message {
@@ -96,7 +110,10 @@ public actor WebSocketTransport {
     }
 
     private func receiveBinaryMessages() async {
-        while let webSocket = webSocket {
+        // Check connection status on each iteration
+        while !Task.isCancelled {
+            guard let webSocket = webSocket else { break }
+
             do {
                 let message = try await webSocket.receive()
                 if case .data(let data) = message {
@@ -117,4 +134,7 @@ public enum TransportError: Error {
 
     /// WebSocket is not connected - call connect() first
     case notConnected
+
+    /// Already connected - call disconnect() before reconnecting
+    case alreadyConnected
 }
