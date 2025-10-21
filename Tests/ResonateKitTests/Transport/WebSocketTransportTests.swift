@@ -10,8 +10,8 @@ struct WebSocketTransportTests {
         let transport = WebSocketTransport(url: url)
 
         // Verify streams exist
-        var textIterator = transport.textMessages.makeAsyncIterator()
-        var binaryIterator = transport.binaryMessages.makeAsyncIterator()
+        _ = transport.textMessages.makeAsyncIterator()
+        _ = transport.binaryMessages.makeAsyncIterator()
 
         // Streams should be ready but have no data yet
         // (This is a basic structure test - full WebSocket testing requires mock server)
