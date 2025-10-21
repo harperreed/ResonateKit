@@ -10,6 +10,7 @@ public actor BufferManager {
     private var bufferedBytes: Int = 0
 
     public init(capacity: Int) {
+        precondition(capacity > 0, "Buffer capacity must be positive")
         self.capacity = capacity
     }
 
@@ -20,6 +21,10 @@ public actor BufferManager {
 
     /// Register a chunk added to the buffer
     public func register(endTimeMicros: Int64, byteCount: Int) {
+        guard endTimeMicros >= 0, byteCount >= 0 else {
+            return  // Silently ignore invalid chunks
+        }
+
         bufferedChunks.append((endTimeMicros, byteCount))
         bufferedBytes += byteCount
     }

@@ -35,6 +35,18 @@ public actor ClockSynchronizer {
         serverTransmitted: Int64,
         clientReceived: Int64
     ) {
+        // Validate timestamps are non-negative
+        guard clientTransmitted >= 0, serverReceived >= 0,
+              serverTransmitted >= 0, clientReceived >= 0 else {
+            return  // Silently ignore invalid samples
+        }
+
+        // Validate timestamps are in reasonable order
+        guard clientReceived >= clientTransmitted,
+              serverTransmitted >= serverReceived else {
+            return  // Silently ignore out-of-order samples
+        }
+
         // NTP-style calculation
         // Round-trip delay: (t4 - t1) - (t3 - t2)
         // We calculate this for potential future use in filtering high-latency samples
