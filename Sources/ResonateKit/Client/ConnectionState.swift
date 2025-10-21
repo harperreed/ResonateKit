@@ -8,7 +8,7 @@ public enum ConnectionState: Sendable {
     case disconnected
     case connecting
     case connected
-    case error(Error)
+    case error(String)  // Store error description instead of Error to maintain Sendable
 }
 
 extension ConnectionState: Equatable {
@@ -19,7 +19,7 @@ extension ConnectionState: Equatable {
              (.connected, .connected):
             return true
         case (.error(let lhsError), .error(let rhsError)):
-            return lhsError.localizedDescription == rhsError.localizedDescription
+            return lhsError == rhsError
         default:
             return false
         }

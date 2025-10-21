@@ -103,10 +103,22 @@ public struct PlayerSupport: Codable, Sendable {
 
 public struct ArtworkSupport: Codable, Sendable {
     // TODO: Implement when artwork role is added
+
+    public init() {}
+
+    // Explicit Codable implementation for empty struct
+    public init(from decoder: Decoder) throws {}
+    public func encode(to encoder: Encoder) throws {}
 }
 
 public struct VisualizerSupport: Codable, Sendable {
     // TODO: Implement when visualizer role is added
+
+    public init() {}
+
+    // Explicit Codable implementation for empty struct
+    public init(from decoder: Decoder) throws {}
+    public func encode(to encoder: Encoder) throws {}
 }
 
 // MARK: - Server Messages
@@ -125,6 +137,12 @@ public struct ServerHelloPayload: Codable, Sendable {
     public let serverId: String
     public let name: String
     public let version: Int
+
+    public init(serverId: String, name: String, version: Int) {
+        self.serverId = serverId
+        self.name = name
+        self.version = version
+    }
 }
 
 /// Client time message for clock sync
@@ -149,12 +167,22 @@ public struct ClientTimePayload: Codable, Sendable {
 public struct ServerTimeMessage: ResonateMessage {
     public let type = "server/time"
     public let payload: ServerTimePayload
+
+    public init(payload: ServerTimePayload) {
+        self.payload = payload
+    }
 }
 
 public struct ServerTimePayload: Codable, Sendable {
     public let clientTransmitted: Int64
     public let serverReceived: Int64
     public let serverTransmitted: Int64
+
+    public init(clientTransmitted: Int64, serverReceived: Int64, serverTransmitted: Int64) {
+        self.clientTransmitted = clientTransmitted
+        self.serverReceived = serverReceived
+        self.serverTransmitted = serverTransmitted
+    }
 }
 
 // MARK: - Stream Messages
@@ -173,6 +201,12 @@ public struct StreamStartPayload: Codable, Sendable {
     public let player: StreamStartPlayer?
     public let artwork: StreamStartArtwork?
     public let visualizer: StreamStartVisualizer?
+
+    public init(player: StreamStartPlayer?, artwork: StreamStartArtwork?, visualizer: StreamStartVisualizer?) {
+        self.player = player
+        self.artwork = artwork
+        self.visualizer = visualizer
+    }
 }
 
 public struct StreamStartPlayer: Codable, Sendable {
@@ -181,14 +215,34 @@ public struct StreamStartPlayer: Codable, Sendable {
     public let channels: Int
     public let bitDepth: Int
     public let codecHeader: String?
+
+    public init(codec: String, sampleRate: Int, channels: Int, bitDepth: Int, codecHeader: String?) {
+        self.codec = codec
+        self.sampleRate = sampleRate
+        self.channels = channels
+        self.bitDepth = bitDepth
+        self.codecHeader = codecHeader
+    }
 }
 
 public struct StreamStartArtwork: Codable, Sendable {
     // TODO: Implement when artwork role is added
+
+    public init() {}
+
+    // Explicit Codable implementation for empty struct
+    public init(from decoder: Decoder) throws {}
+    public func encode(to encoder: Encoder) throws {}
 }
 
 public struct StreamStartVisualizer: Codable, Sendable {
     // TODO: Implement when visualizer role is added
+
+    public init() {}
+
+    // Explicit Codable implementation for empty struct
+    public init(from decoder: Decoder) throws {}
+    public func encode(to encoder: Encoder) throws {}
 }
 
 /// Stream end message
@@ -212,4 +266,10 @@ public struct GroupUpdatePayload: Codable, Sendable {
     public let playbackState: String?
     public let groupId: String?
     public let groupName: String?
+
+    public init(playbackState: String?, groupId: String?, groupName: String?) {
+        self.playbackState = playbackState
+        self.groupId = groupId
+        self.groupName = groupName
+    }
 }

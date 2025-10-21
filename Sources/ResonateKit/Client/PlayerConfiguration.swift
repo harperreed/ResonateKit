@@ -12,6 +12,9 @@ public struct PlayerConfiguration: Sendable {
     public let supportedFormats: [AudioFormatSpec]
 
     public init(bufferCapacity: Int, supportedFormats: [AudioFormatSpec]) {
+        precondition(bufferCapacity > 0, "Buffer capacity must be positive")
+        precondition(!supportedFormats.isEmpty, "Must support at least one audio format")
+
         self.bufferCapacity = bufferCapacity
         self.supportedFormats = supportedFormats
     }
