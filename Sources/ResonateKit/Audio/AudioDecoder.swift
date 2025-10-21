@@ -5,20 +5,22 @@ import Foundation
 import AVFoundation
 
 /// Audio decoder protocol
-protocol AudioDecoder {
+public protocol AudioDecoder {
     func decode(_ data: Data) throws -> Data
 }
 
 /// PCM pass-through decoder
-class PCMDecoder: AudioDecoder {
-    func decode(_ data: Data) throws -> Data {
+public class PCMDecoder: AudioDecoder {
+    public init() {}
+
+    public func decode(_ data: Data) throws -> Data {
         return data // No decoding needed for PCM
     }
 }
 
 /// Creates decoder for specified codec
-enum AudioDecoderFactory {
-    static func create(
+public enum AudioDecoderFactory {
+    public static func create(
         codec: AudioCodec,
         sampleRate: Int,
         channels: Int,

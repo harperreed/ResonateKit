@@ -11,10 +11,21 @@ public actor ClockSynchronizer {
     public init() {}
 
     /// Current clock offset (median of samples)
+    /// Uses median to filter out network jitter outliers
     public var currentOffset: Int64 {
         guard !offsetSamples.isEmpty else { return 0 }
         let sorted = offsetSamples.sorted()
-        return sorted[sorted.count / 2]
+
+        // True median calculation
+        if sorted.count % 2 == 0 {
+            // Even number: average of two middle elements
+            let mid1 = sorted[sorted.count / 2 - 1]
+            let mid2 = sorted[sorted.count / 2]
+            return (mid1 + mid2) / 2
+        } else {
+            // Odd number: middle element
+            return sorted[sorted.count / 2]
+        }
     }
 
     /// Process server time message to update offset

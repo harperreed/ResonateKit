@@ -25,11 +25,14 @@ public actor BufferManager {
     }
 
     /// Remove chunks that have finished playing
+    /// - Parameter nowMicros: Current playback time in microseconds
     public func pruneConsumed(nowMicros: Int64) {
         while let first = bufferedChunks.first, first.endTimeMicros <= nowMicros {
             bufferedBytes -= first.byteCount
             bufferedChunks.removeFirst()
         }
+        // Safety check: ensure bufferedBytes never goes negative
+        // This should never happen with correct usage, but protects against bugs
         bufferedBytes = max(bufferedBytes, 0)
     }
 

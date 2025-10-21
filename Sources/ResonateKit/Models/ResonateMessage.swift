@@ -2,6 +2,9 @@
 // ABOUTME: All messages follow the pattern: { "type": "...", "payload": {...} }
 
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Base protocol for all Resonate messages
 public protocol ResonateMessage: Codable, Sendable {
@@ -112,6 +115,10 @@ public struct VisualizerSupport: Codable, Sendable {
 public struct ServerHelloMessage: ResonateMessage {
     public let type = "server/hello"
     public let payload: ServerHelloPayload
+
+    public init(payload: ServerHelloPayload) {
+        self.payload = payload
+    }
 }
 
 public struct ServerHelloPayload: Codable, Sendable {
@@ -156,6 +163,10 @@ public struct ServerTimePayload: Codable, Sendable {
 public struct StreamStartMessage: ResonateMessage {
     public let type = "stream/start"
     public let payload: StreamStartPayload
+
+    public init(payload: StreamStartPayload) {
+        self.payload = payload
+    }
 }
 
 public struct StreamStartPayload: Codable, Sendable {
@@ -183,12 +194,18 @@ public struct StreamStartVisualizer: Codable, Sendable {
 /// Stream end message
 public struct StreamEndMessage: ResonateMessage {
     public let type = "stream/end"
+
+    public init() {}
 }
 
 /// Group update message
 public struct GroupUpdateMessage: ResonateMessage {
     public let type = "group/update"
     public let payload: GroupUpdatePayload
+
+    public init(payload: GroupUpdatePayload) {
+        self.payload = payload
+    }
 }
 
 public struct GroupUpdatePayload: Codable, Sendable {
