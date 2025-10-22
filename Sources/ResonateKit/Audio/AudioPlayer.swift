@@ -80,6 +80,18 @@ public actor AudioPlayer {
         // Start the queue
         AudioQueueStart(queue, nil)
         _isPlaying = true
+
+        // Allocate buffers
+        let bufferSize: UInt32 = 16384  // 16KB per buffer
+        for _ in 0..<3 {  // 3 buffers for smooth playback
+            var buffer: AudioQueueBufferRef?
+            let status = AudioQueueAllocateBuffer(queue, bufferSize, &buffer)
+
+            if status == noErr, let buffer = buffer {
+                // Prime buffer with initial chunk
+                fillBuffer(queue: queue, buffer: buffer)
+            }
+        }
     }
 
     /// Stop playback and clean up
@@ -157,13 +169,90 @@ public actor AudioPlayer {
         return Int64(nanos / 1000)  // Convert to microseconds
     }
 
+    nonisolated fileprivate func fillBuffer(queue: AudioQueueRef, buffer: AudioQueueBufferRef) {
+        // Synchronously get next chunk - this is safe because AudioQueue manages its own thread
+        let chunkData = getNextChunkSync()
+
+        guard let chunk = chunkData else {
+            // No data available - enqueue silence
+            memset(buffer.pointee.mAudioData, 0, Int(buffer.pointee.mAudioDataBytesCapacity))
+            buffer.pointee.mAudioDataByteSize = buffer.pointee.mAudioDataBytesCapacity
+            AudioQueueEnqueueBuffer(queue, buffer, 0, nil)
+            return
+        }
+
+        // Copy chunk data to buffer
+        let copySize = min(chunk.data.count, Int(buffer.pointee.mAudioDataBytesCapacity))
+        _ = chunk.data.withUnsafeBytes { srcBytes in
+            memcpy(buffer.pointee.mAudioData, srcBytes.baseAddress, copySize)
+        }
+
+        buffer.pointee.mAudioDataByteSize = UInt32(copySize)
+
+        // Calculate playback time
+        let playbackTime = AudioTimeStamp(
+            mSampleTime: 0,
+            mHostTime: UInt64(chunk.timestamp * 1000),  // Convert microseconds to nanoseconds
+            mRateScalar: 1.0,
+            mWordClockTime: 0,
+            mSMPTETime: SMPTETime(),
+            mFlags: [.hostTimeValid],
+            mReserved: 0
+        )
+
+        // Enqueue buffer with timestamp
+        var time = playbackTime
+        AudioQueueEnqueueBufferWithParameters(
+            queue,
+            buffer,
+            0,
+            nil,
+            0,
+            0,
+            0,
+            nil,
+            &time,
+            nil
+        )
+
+        // Update buffer manager asynchronously
+        pruneBufferAsync()
+    }
+
+    private nonisolated func getNextChunkSync() -> (timestamp: Int64, data: Data)? {
+        // Use assumeIsolated to safely access actor state from AudioQueue thread
+        // This is safe because AudioQueue serializes callbacks
+        return assumeIsolated { actor in
+            guard !actor.pendingChunks.isEmpty else {
+                return nil
+            }
+            return actor.pendingChunks.removeFirst()
+        }
+    }
+
+    private nonisolated func pruneBufferAsync() {
+        // Schedule buffer pruning on the actor
+        Task {
+            await self.pruneBuffer()
+        }
+    }
+
+    private func pruneBuffer() async {
+        await bufferManager.pruneConsumed(nowMicros: getCurrentMicroseconds())
+    }
+
     // Cleanup happens in stop() method called explicitly before deallocation
     // AudioQueue will be disposed when stop() is called or connection is closed
 }
 
 // AudioQueue callback (C function)
 private let audioQueueCallback: AudioQueueOutputCallback = { userData, queue, buffer in
-    // TODO: Implement in next task
+    guard let userData = userData else { return }
+
+    let player = Unmanaged<AudioPlayer>.fromOpaque(userData).takeUnretainedValue()
+
+    // Call nonisolated method directly from callback
+    player.fillBuffer(queue: queue, buffer: buffer)
 }
 
 public enum AudioPlayerError: Error {
