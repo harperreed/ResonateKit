@@ -127,7 +127,33 @@ public final class ResonateClient {
 
     @MainActor
     private func sendClientHello() async throws {
-        // TODO: Implement in next task
+        guard let transport = transport else {
+            throw ResonateClientError.notConnected
+        }
+
+        // Build player support if player role
+        var playerSupport: PlayerSupport?
+        if roles.contains(.player), let playerConfig = playerConfig {
+            playerSupport = PlayerSupport(
+                supportedFormats: playerConfig.supportedFormats,
+                bufferCapacity: playerConfig.bufferCapacity,
+                supportedCommands: [.volume, .mute]
+            )
+        }
+
+        let payload = ClientHelloPayload(
+            clientId: clientId,
+            name: name,
+            deviceInfo: DeviceInfo.current,
+            version: 1,
+            supportedRoles: Array(roles),
+            playerSupport: playerSupport,
+            artworkSupport: roles.contains(.artwork) ? ArtworkSupport() : nil,
+            visualizerSupport: roles.contains(.visualizer) ? VisualizerSupport() : nil
+        )
+
+        let message = ClientHelloMessage(payload: payload)
+        try await transport.send(message)
     }
 
     @MainActor
@@ -161,4 +187,10 @@ public struct GroupInfo: Sendable {
     public let groupId: String
     public let groupName: String
     public let playbackState: String?
+}
+
+public enum ResonateClientError: Error {
+    case notConnected
+    case unsupportedCodec(String)
+    case audioSetupFailed
 }
