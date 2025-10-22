@@ -19,8 +19,19 @@ public actor AudioPlayer {
     private var pendingChunks: [(timestamp: Int64, data: Data)] = []
     private let maxPendingChunks = 50
 
+    private var currentVolume: Float = 1.0
+    private var isMuted: Bool = false
+
     public var isPlaying: Bool {
         return _isPlaying
+    }
+
+    public var volume: Float {
+        return currentVolume
+    }
+
+    public var muted: Bool {
+        return isMuted
     }
 
     public init(bufferManager: BufferManager, clockSync: ClockSynchronizer) {
@@ -239,6 +250,27 @@ public actor AudioPlayer {
 
     private func pruneBuffer() async {
         await bufferManager.pruneConsumed(nowMicros: getCurrentMicroseconds())
+    }
+
+    /// Set volume (0.0 to 1.0)
+    public func setVolume(_ volume: Float) {
+        guard let queue = audioQueue else { return }
+
+        let clampedVolume = max(0.0, min(1.0, volume))
+        currentVolume = clampedVolume
+
+        AudioQueueSetParameter(queue, kAudioQueueParam_Volume, clampedVolume)
+    }
+
+    /// Set mute state
+    public func setMute(_ muted: Bool) {
+        guard let queue = audioQueue else { return }
+
+        self.isMuted = muted
+
+        // Set volume to 0 when muted, restore when unmuted
+        let effectiveVolume = muted ? 0.0 : currentVolume
+        AudioQueueSetParameter(queue, kAudioQueueParam_Volume, effectiveVolume)
     }
 
     // Cleanup happens in stop() method called explicitly before deallocation

@@ -339,6 +339,20 @@ public final class ResonateClient {
         let nanos = mach_absolute_time() * UInt64(info.numer) / UInt64(info.denom)
         return Int64(nanos / 1000)
     }
+
+    /// Set playback volume (0.0 to 1.0)
+    @MainActor
+    public func setVolume(_ volume: Float) async {
+        guard let audioPlayer = audioPlayer else { return }
+        await audioPlayer.setVolume(volume)
+    }
+
+    /// Set mute state
+    @MainActor
+    public func setMute(_ muted: Bool) async {
+        guard let audioPlayer = audioPlayer else { return }
+        await audioPlayer.setMute(muted)
+    }
 }
 
 public enum ClientEvent: Sendable {

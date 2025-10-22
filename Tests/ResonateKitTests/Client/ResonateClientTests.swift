@@ -3,6 +3,7 @@ import Testing
 import Foundation
 
 @Suite("ResonateClient Tests")
+@MainActor
 struct ResonateClientTests {
     @Test("Initialize client with player role")
     func testInitialization() {
@@ -21,7 +22,7 @@ struct ResonateClientTests {
         )
 
         // Client should initialize successfully
-        #expect(client != nil)
+        #expect(client.connectionState == .disconnected)
     }
 
     @Test("Connect creates transport and starts connecting")
