@@ -185,6 +185,44 @@ public struct ServerTimePayload: Codable, Sendable {
     }
 }
 
+// MARK: - State Messages
+
+/// Client state message (sent by clients to report current state)
+public struct ClientStateMessage: ResonateMessage {
+    public let type = "client/state"
+    public let payload: ClientStatePayload
+
+    public init(payload: ClientStatePayload) {
+        self.payload = payload
+    }
+}
+
+public struct ClientStatePayload: Codable, Sendable {
+    public let player: PlayerState?
+
+    public init(player: PlayerState?) {
+        self.player = player
+    }
+}
+
+public struct PlayerState: Codable, Sendable {
+    /// Synchronization state: "synchronized" or "error"
+    public let state: String
+    /// Volume level (0-100)
+    public let volume: Int
+    /// Mute state
+    public let muted: Bool
+
+    public init(state: String, volume: Int, muted: Bool) {
+        precondition(state == "synchronized" || state == "error", "State must be 'synchronized' or 'error'")
+        precondition(volume >= 0 && volume <= 100, "Volume must be between 0 and 100")
+
+        self.state = state
+        self.volume = volume
+        self.muted = muted
+    }
+}
+
 // MARK: - Stream Messages
 
 /// Stream start message

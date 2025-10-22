@@ -16,6 +16,9 @@ public final class ResonateClient {
 
     // State
     public private(set) var connectionState: ConnectionState = .disconnected
+    private var playerSyncState: String = "synchronized"  // "synchronized" or "error"
+    private var currentVolume: Float = 1.0
+    private var currentMuted: Bool = false
 
     // Dependencies
     private var transport: WebSocketTransport?
@@ -157,6 +160,31 @@ public final class ResonateClient {
         try await transport.send(message)
     }
 
+    private func sendClientState() async throws {
+        guard let transport = transport else {
+            throw ResonateClientError.notConnected
+        }
+
+        // Only send if we have player role
+        guard roles.contains(.player) else {
+            return
+        }
+
+        // Convert volume from 0.0-1.0 to 0-100
+        let volumeInt = Int(currentVolume * 100)
+
+        let playerState = PlayerState(
+            state: playerSyncState,
+            volume: volumeInt,
+            muted: currentMuted
+        )
+
+        let payload = ClientStatePayload(player: playerState)
+        let message = ClientStateMessage(payload: payload)
+
+        try await transport.send(message)
+    }
+
     private func runMessageLoop() async {
         guard let transport = transport else { return }
 
@@ -256,6 +284,11 @@ public final class ResonateClient {
         )
 
         eventsContinuation.yield(.serverConnected(info))
+
+        // Send initial client state after receiving server hello (required by spec)
+        Task {
+            try? await sendClientState()
+        }
     }
 
     private func handleServerTime(_ message: ServerTimeMessage) async {
@@ -344,14 +377,24 @@ public final class ResonateClient {
     @MainActor
     public func setVolume(_ volume: Float) async {
         guard let audioPlayer = audioPlayer else { return }
+
+        currentVolume = volume
         await audioPlayer.setVolume(volume)
+
+        // Send state update to server (required by spec)
+        try? await sendClientState()
     }
 
     /// Set mute state
     @MainActor
     public func setMute(_ muted: Bool) async {
         guard let audioPlayer = audioPlayer else { return }
+
+        currentMuted = muted
         await audioPlayer.setMute(muted)
+
+        // Send state update to server (required by spec)
+        try? await sendClientState()
     }
 }
 
