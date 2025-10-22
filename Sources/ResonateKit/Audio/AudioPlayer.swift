@@ -16,6 +16,9 @@ public actor AudioPlayer {
 
     private var _isPlaying: Bool = false
 
+    private var pendingChunks: [(timestamp: Int64, data: Data)] = []
+    private let maxPendingChunks = 50
+
     public var isPlaying: Bool {
         return _isPlaying
     }
@@ -92,6 +95,68 @@ public actor AudioPlayer {
         _isPlaying = false
     }
 
+    /// Enqueue audio chunk for playback
+    public func enqueue(chunk: BinaryMessage) async throws {
+        guard audioQueue != nil else {
+            throw AudioPlayerError.notStarted
+        }
+
+        // Decode chunk data
+        guard let decoder = decoder else {
+            throw AudioPlayerError.notStarted
+        }
+
+        let pcmData = try decoder.decode(chunk.data)
+
+        // Convert server timestamp to local time
+        let localTimestamp = await clockSync.serverTimeToLocal(chunk.timestamp)
+
+        // Check if chunk is late (timestamp in the past)
+        let now = getCurrentMicroseconds()
+        if localTimestamp < now {
+            // Drop late chunk to maintain sync
+            return
+        }
+
+        // Check buffer capacity
+        let hasCapacity = await bufferManager.hasCapacity(pcmData.count)
+        guard hasCapacity else {
+            // Backpressure - don't accept chunk
+            throw AudioPlayerError.bufferFull
+        }
+
+        // Register with buffer manager
+        let duration = calculateDuration(bytes: pcmData.count)
+        await bufferManager.register(endTimeMicros: localTimestamp + duration, byteCount: pcmData.count)
+
+        // Store pending chunk
+        pendingChunks.append((timestamp: localTimestamp, data: pcmData))
+
+        // Limit pending queue size
+        if pendingChunks.count > maxPendingChunks {
+            pendingChunks.removeFirst()
+        }
+    }
+
+    private func calculateDuration(bytes: Int) -> Int64 {
+        guard let format = currentFormat else { return 0 }
+
+        let bytesPerSample = format.channels * format.bitDepth / 8
+        let samples = bytes / bytesPerSample
+        let seconds = Double(samples) / Double(format.sampleRate)
+
+        return Int64(seconds * 1_000_000)  // Convert to microseconds
+    }
+
+    private func getCurrentMicroseconds() -> Int64 {
+        let timebase = mach_timebase_info()
+        var info = timebase
+        mach_timebase_info(&info)
+
+        let nanos = mach_absolute_time() * UInt64(info.numer) / UInt64(info.denom)
+        return Int64(nanos / 1000)  // Convert to microseconds
+    }
+
     // Cleanup happens in stop() method called explicitly before deallocation
     // AudioQueue will be disposed when stop() is called or connection is closed
 }
@@ -105,4 +170,5 @@ public enum AudioPlayerError: Error {
     case queueCreationFailed
     case notStarted
     case decodingFailed
+    case bufferFull
 }
