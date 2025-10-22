@@ -181,9 +181,26 @@ public final class ResonateClient {
         }
     }
 
-    @MainActor
     private func runClockSync() async {
-        // TODO: Implement in next task
+        guard let transport = transport else { return }
+
+        while !Task.isCancelled {
+            // Send client/time every 5 seconds
+            do {
+                let now = getCurrentMicroseconds()
+
+                let payload = ClientTimePayload(clientTransmitted: now)
+                let message = ClientTimeMessage(payload: payload)
+
+                try await transport.send(message)
+            } catch {
+                // Connection lost
+                break
+            }
+
+            // Wait 5 seconds
+            try? await Task.sleep(for: .seconds(5))
+        }
     }
 
     private func handleTextMessage(_ text: String) async {
