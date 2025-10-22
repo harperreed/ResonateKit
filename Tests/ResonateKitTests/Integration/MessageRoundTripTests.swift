@@ -22,7 +22,7 @@ struct MessageRoundTripTests {
             version: 1,
             supportedRoles: [.player, .controller, .metadata],
             playerSupport: PlayerSupport(
-                supportedFormats: [
+                supportFormats: [
                     AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
                     AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44100, bitDepth: 24),
                     AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
@@ -63,10 +63,10 @@ struct MessageRoundTripTests {
         let playerSupport = try #require(decodedMessage.payload.playerSupport)
         #expect(playerSupport.bufferCapacity == 1_048_576)
         #expect(playerSupport.supportedCommands == [.volume, .mute])
-        #expect(playerSupport.supportedFormats.count == 3)
+        #expect(playerSupport.supportFormats.count == 3)
 
         // Verify first format
-        let firstFormat = playerSupport.supportedFormats[0]
+        let firstFormat = playerSupport.supportFormats[0]
         #expect(firstFormat.codec == .opus)
         #expect(firstFormat.channels == 2)
         #expect(firstFormat.sampleRate == 48000)
@@ -132,7 +132,7 @@ struct MessageRoundTripTests {
                 version: 1,
                 supportedRoles: [.player],
                 playerSupport: PlayerSupport(
-                    supportedFormats: [
+                    supportFormats: [
                         AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
                     ],
                     bufferCapacity: 512000,

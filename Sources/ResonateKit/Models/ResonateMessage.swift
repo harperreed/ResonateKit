@@ -90,12 +90,12 @@ public enum PlayerCommand: String, Codable, Sendable {
 }
 
 public struct PlayerSupport: Codable, Sendable {
-    public let supportedFormats: [AudioFormatSpec]
+    public let supportFormats: [AudioFormatSpec]
     public let bufferCapacity: Int
     public let supportedCommands: [PlayerCommand]
 
-    public init(supportedFormats: [AudioFormatSpec], bufferCapacity: Int, supportedCommands: [PlayerCommand]) {
-        self.supportedFormats = supportedFormats
+    public init(supportFormats: [AudioFormatSpec], bufferCapacity: Int, supportedCommands: [PlayerCommand]) {
+        self.supportFormats = supportFormats
         self.bufferCapacity = bufferCapacity
         self.supportedCommands = supportedCommands
     }

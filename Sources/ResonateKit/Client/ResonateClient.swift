@@ -83,10 +83,8 @@ public final class ResonateClient {
             self.audioPlayer = audioPlayer
 
             // Initialize client state from audio player
-            Task {
-                self.currentVolume = await audioPlayer.volume
-                self.currentMuted = await audioPlayer.muted
-            }
+            self.currentVolume = await audioPlayer.volume
+            self.currentMuted = await audioPlayer.muted
         }
 
         // Connect WebSocket
@@ -131,8 +129,12 @@ public final class ResonateClient {
         bufferManager = nil
         audioPlayer = nil
 
+        // Reset player state
+        playerSyncState = "synchronized"
+        currentVolume = 1.0
+        currentMuted = false
+
         connectionState = .disconnected
-        eventsContinuation.finish()
     }
 
     @MainActor
@@ -145,7 +147,7 @@ public final class ResonateClient {
         var playerSupport: PlayerSupport?
         if roles.contains(.player), let playerConfig = playerConfig {
             playerSupport = PlayerSupport(
-                supportedFormats: playerConfig.supportedFormats,
+                supportFormats: playerConfig.supportedFormats,
                 bufferCapacity: playerConfig.bufferCapacity,
                 supportedCommands: [.volume, .mute]
             )
@@ -176,8 +178,8 @@ public final class ResonateClient {
             return
         }
 
-        // Convert volume from 0.0-1.0 to 0-100
-        let volumeInt = Int(currentVolume * 100)
+        // Convert volume from 0.0-1.0 to 0-100 (with rounding)
+        let volumeInt = Int((currentVolume * 100).rounded())
 
         let playerState = PlayerState(
             state: playerSyncState,
@@ -280,7 +282,7 @@ public final class ResonateClient {
         }
     }
 
-    private func handleServerHello(_ message: ServerHelloMessage) {
+    private func handleServerHello(_ message: ServerHelloMessage) async {
         connectionState = .connected
 
         let info = ServerInfo(
@@ -292,9 +294,7 @@ public final class ResonateClient {
         eventsContinuation.yield(.serverConnected(info))
 
         // Send initial client state after receiving server hello (required by spec)
-        Task {
-            try? await sendClientState()
-        }
+        try? await sendClientState()
     }
 
     private func handleServerTime(_ message: ServerTimeMessage) async {
@@ -339,6 +339,7 @@ public final class ResonateClient {
             try await audioPlayer.start(format: format, codecHeader: codecHeader)
             playerSyncState = "synchronized"  // Successfully started
             eventsContinuation.yield(.streamStarted(format))
+            try? await sendClientState()  // Notify server of synchronized state
         } catch {
             connectionState = .error("Failed to start audio: \(error.localizedDescription)")
             playerSyncState = "error"
@@ -350,10 +351,11 @@ public final class ResonateClient {
         guard let audioPlayer = audioPlayer else { return }
 
         await audioPlayer.stop()
+        playerSyncState = "synchronized"  // Reset to clean state
         eventsContinuation.yield(.streamEnded)
     }
 
-    private func handleGroupUpdate(_ message: GroupUpdateMessage) {
+    private func handleGroupUpdate(_ message: GroupUpdateMessage) async {
         if let groupId = message.payload.groupId,
            let groupName = message.payload.groupName {
             let info = GroupInfo(
@@ -389,8 +391,12 @@ public final class ResonateClient {
     public func setVolume(_ volume: Float) async {
         guard let audioPlayer = audioPlayer else { return }
 
-        currentVolume = volume
-        await audioPlayer.setVolume(volume)
+        // Clamp volume to valid range
+        let clampedVolume = max(0.0, min(1.0, volume))
+
+        // Update AudioPlayer and get actual value back
+        await audioPlayer.setVolume(clampedVolume)
+        currentVolume = await audioPlayer.volume
 
         // Send state update to server (required by spec)
         try? await sendClientState()
@@ -401,8 +407,9 @@ public final class ResonateClient {
     public func setMute(_ muted: Bool) async {
         guard let audioPlayer = audioPlayer else { return }
 
-        currentMuted = muted
+        // Update AudioPlayer and get actual value back
         await audioPlayer.setMute(muted)
+        currentMuted = await audioPlayer.muted
 
         // Send state update to server (required by spec)
         try? await sendClientState()
