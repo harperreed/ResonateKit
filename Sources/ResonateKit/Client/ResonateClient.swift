@@ -6,6 +6,7 @@ import Observation
 
 /// Main Resonate client
 @Observable
+@MainActor
 public final class ResonateClient {
     // Configuration
     private let clientId: String
@@ -156,14 +157,170 @@ public final class ResonateClient {
         try await transport.send(message)
     }
 
-    @MainActor
     private func runMessageLoop() async {
-        // TODO: Implement in next task
+        guard let transport = transport else { return }
+
+        await withTaskGroup(of: Void.self) { group in
+            // Text message handler
+            group.addTask { [weak self] in
+                guard let self = self else { return }
+
+                for await text in transport.textMessages {
+                    await self.handleTextMessage(text)
+                }
+            }
+
+            // Binary message handler
+            group.addTask { [weak self] in
+                guard let self = self else { return }
+
+                for await data in transport.binaryMessages {
+                    await self.handleBinaryMessage(data)
+                }
+            }
+        }
     }
 
     @MainActor
     private func runClockSync() async {
         // TODO: Implement in next task
+    }
+
+    private func handleTextMessage(_ text: String) async {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        guard let data = text.data(using: .utf8) else {
+            return
+        }
+
+        // Try to decode message type
+        // Note: In production, we'd use a discriminated union decoder
+        // For now, try each message type
+
+        if let message = try? decoder.decode(ServerHelloMessage.self, from: data) {
+            await handleServerHello(message)
+        } else if let message = try? decoder.decode(ServerTimeMessage.self, from: data) {
+            await handleServerTime(message)
+        } else if let message = try? decoder.decode(StreamStartMessage.self, from: data) {
+            await handleStreamStart(message)
+        } else if let message = try? decoder.decode(StreamEndMessage.self, from: data) {
+            await handleStreamEnd(message)
+        } else if let message = try? decoder.decode(GroupUpdateMessage.self, from: data) {
+            await handleGroupUpdate(message)
+        }
+    }
+
+    private func handleBinaryMessage(_ data: Data) async {
+        guard let message = BinaryMessage(data: data) else {
+            return
+        }
+
+        switch message.type {
+        case .audioChunk:
+            await handleAudioChunk(message)
+
+        case .artworkChannel0, .artworkChannel1, .artworkChannel2, .artworkChannel3:
+            let channel = Int(message.type.rawValue - 4)
+            eventsContinuation.yield(.artworkReceived(channel: channel, data: message.data))
+
+        case .visualizerData:
+            eventsContinuation.yield(.visualizerData(message.data))
+        }
+    }
+
+    private func handleServerHello(_ message: ServerHelloMessage) {
+        connectionState = .connected
+
+        let info = ServerInfo(
+            serverId: message.payload.serverId,
+            name: message.payload.name,
+            version: message.payload.version
+        )
+
+        eventsContinuation.yield(.serverConnected(info))
+    }
+
+    private func handleServerTime(_ message: ServerTimeMessage) async {
+        guard let clockSync = clockSync else { return }
+
+        let now = getCurrentMicroseconds()
+
+        await clockSync.processServerTime(
+            clientTransmitted: message.payload.clientTransmitted,
+            serverReceived: message.payload.serverReceived,
+            serverTransmitted: message.payload.serverTransmitted,
+            clientReceived: now
+        )
+    }
+
+    private func handleStreamStart(_ message: StreamStartMessage) async {
+        guard let playerInfo = message.payload.player else { return }
+        guard let audioPlayer = audioPlayer else { return }
+
+        // Parse codec
+        guard let codec = AudioCodec(rawValue: playerInfo.codec) else {
+            connectionState = .error("Unsupported codec: \(playerInfo.codec)")
+            return
+        }
+
+        let format = AudioFormatSpec(
+            codec: codec,
+            channels: playerInfo.channels,
+            sampleRate: playerInfo.sampleRate,
+            bitDepth: playerInfo.bitDepth
+        )
+
+        // Decode codec header if present
+        var codecHeader: Data?
+        if let headerBase64 = playerInfo.codecHeader {
+            codecHeader = Data(base64Encoded: headerBase64)
+        }
+
+        do {
+            try await audioPlayer.start(format: format, codecHeader: codecHeader)
+            eventsContinuation.yield(.streamStarted(format))
+        } catch {
+            connectionState = .error("Failed to start audio: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleStreamEnd(_ message: StreamEndMessage) async {
+        guard let audioPlayer = audioPlayer else { return }
+
+        await audioPlayer.stop()
+        eventsContinuation.yield(.streamEnded)
+    }
+
+    private func handleGroupUpdate(_ message: GroupUpdateMessage) {
+        if let groupId = message.payload.groupId,
+           let groupName = message.payload.groupName {
+            let info = GroupInfo(
+                groupId: groupId,
+                groupName: groupName,
+                playbackState: message.payload.playbackState
+            )
+
+            eventsContinuation.yield(.groupUpdated(info))
+        }
+    }
+
+    private func handleAudioChunk(_ message: BinaryMessage) async {
+        guard let audioPlayer = audioPlayer else { return }
+
+        do {
+            try await audioPlayer.enqueue(chunk: message)
+        } catch {
+            // Log but continue - dropping chunks is acceptable for sync
+        }
+    }
+
+    private func getCurrentMicroseconds() -> Int64 {
+        var info = mach_timebase_info()
+        mach_timebase_info(&info)
+
+        let nanos = mach_absolute_time() * UInt64(info.numer) / UInt64(info.denom)
+        return Int64(nanos / 1000)
     }
 }
 
