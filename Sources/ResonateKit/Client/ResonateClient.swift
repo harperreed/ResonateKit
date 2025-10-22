@@ -81,6 +81,12 @@ public final class ResonateClient {
 
             self.bufferManager = bufferManager
             self.audioPlayer = audioPlayer
+
+            // Initialize client state from audio player
+            Task {
+                self.currentVolume = await audioPlayer.volume
+                self.currentMuted = await audioPlayer.muted
+            }
         }
 
         // Connect WebSocket
@@ -311,6 +317,8 @@ public final class ResonateClient {
         // Parse codec
         guard let codec = AudioCodec(rawValue: playerInfo.codec) else {
             connectionState = .error("Unsupported codec: \(playerInfo.codec)")
+            playerSyncState = "error"
+            try? await sendClientState()  // Notify server of error state
             return
         }
 
@@ -329,9 +337,12 @@ public final class ResonateClient {
 
         do {
             try await audioPlayer.start(format: format, codecHeader: codecHeader)
+            playerSyncState = "synchronized"  // Successfully started
             eventsContinuation.yield(.streamStarted(format))
         } catch {
             connectionState = .error("Failed to start audio: \(error.localizedDescription)")
+            playerSyncState = "error"
+            try? await sendClientState()  // Notify server of error state
         }
     }
 

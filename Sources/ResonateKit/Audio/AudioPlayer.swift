@@ -116,6 +116,7 @@ public actor AudioPlayer {
         decoder = nil
         currentFormat = nil
         _isPlaying = false
+        pendingChunks.removeAll()  // Clear pending chunks to prevent stale audio on restart
     }
 
     /// Enqueue audio chunk for playback
