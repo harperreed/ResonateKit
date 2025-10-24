@@ -34,11 +34,19 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
     private let playbackWindow: TimeInterval
     private var queue: [ScheduledChunk] = []
     private var schedulerStats: SchedulerStats
+    private var timerTask: Task<Void, Never>?
+
+    // AsyncStream for output
+    private let chunkContinuation: AsyncStream<ScheduledChunk>.Continuation
+    public let scheduledChunks: AsyncStream<ScheduledChunk>
 
     public init(clockSync: ClockSync, playbackWindow: TimeInterval = 0.05) {
         self.clockSync = clockSync
         self.playbackWindow = playbackWindow
         self.schedulerStats = SchedulerStats()
+
+        // Create AsyncStream
+        (scheduledChunks, chunkContinuation) = AsyncStream.makeStream()
     }
 
     /// Schedule a PCM chunk for playback
@@ -90,5 +98,61 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
     /// Get current statistics
     public var stats: SchedulerStats {
         return schedulerStats
+    }
+
+    /// Start the scheduling timer loop
+    public func startScheduling() {
+        guard timerTask == nil else { return }
+
+        timerTask = Task {
+            while !Task.isCancelled {
+                await checkQueue()
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+    }
+
+    /// Stop the scheduler and clear queue
+    public func stop() {
+        timerTask?.cancel()
+        timerTask = nil
+        chunkContinuation.finish()
+    }
+
+    /// Check queue and output ready chunks
+    private func checkQueue() {
+        let now = Date()
+
+        while let next = queue.first {
+            let delay = next.playTime.timeIntervalSince(now)
+
+            if delay > playbackWindow {
+                // Too early, wait
+                break
+            } else if delay < -playbackWindow {
+                // Too late, drop
+                queue.removeFirst()
+                schedulerStats = SchedulerStats(
+                    received: schedulerStats.received,
+                    played: schedulerStats.played,
+                    dropped: schedulerStats.dropped + 1
+                )
+
+                // Log first 10 drops
+                if schedulerStats.dropped <= 10 {
+                    print("[SCHEDULER] Dropped late chunk: \(Int(-delay * 1000))ms late")
+                }
+            } else {
+                // Ready to play (within ±50ms window)
+                let chunk = queue.removeFirst()
+                chunkContinuation.yield(chunk)
+
+                schedulerStats = SchedulerStats(
+                    received: schedulerStats.received,
+                    played: schedulerStats.played + 1,
+                    dropped: schedulerStats.dropped
+                )
+            }
+        }
     }
 }

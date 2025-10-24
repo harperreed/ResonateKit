@@ -52,6 +52,57 @@ final class AudioSchedulerTests: XCTestCase {
         XCTAssertLessThan(chunks[0].playTime, chunks[1].playTime)
         XCTAssertLessThan(chunks[1].playTime, chunks[2].playTime)
     }
+
+    func testSchedulerOutputsReadyChunks() async throws {
+        let clockSync = MockClockSynchronizer(offset: 0, drift: 0.0)
+        let scheduler = AudioScheduler(clockSync: clockSync)
+
+        // Schedule chunk for immediate playback (current time)
+        let now = Date()
+        let nowMicros = Int64(now.timeIntervalSince1970 * 1_000_000)
+
+        await scheduler.schedule(pcm: Data([0x01]), serverTimestamp: nowMicros)
+        await scheduler.startScheduling()
+
+        // Should output chunk immediately
+        let outputChunk: ScheduledChunk? = await withCheckedContinuation { continuation in
+            Task {
+                for await chunk in await scheduler.scheduledChunks {
+                    continuation.resume(returning: chunk)
+                    return
+                }
+                continuation.resume(returning: nil)
+            }
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+        await scheduler.stop()
+
+        XCTAssertNotNil(outputChunk)
+        XCTAssertEqual(outputChunk?.pcmData, Data([0x01]))
+
+        let stats = await scheduler.stats
+        XCTAssertEqual(stats.played, 1)
+    }
+
+    func testSchedulerDropsLateChunks() async throws {
+        let clockSync = MockClockSynchronizer(offset: 0, drift: 0.0)
+        let scheduler = AudioScheduler(clockSync: clockSync)
+
+        // Schedule chunk 100ms in the past
+        let now = Date()
+        let pastMicros = Int64((now.timeIntervalSince1970 - 0.1) * 1_000_000)
+
+        await scheduler.schedule(pcm: Data([0xFF]), serverTimestamp: pastMicros)
+        await scheduler.startScheduling()
+
+        try await Task.sleep(for: .milliseconds(50))
+        await scheduler.stop()
+
+        let stats = await scheduler.stats
+        XCTAssertEqual(stats.dropped, 1)
+        XCTAssertEqual(stats.played, 0)
+    }
 }
 
 // Mock ClockSynchronizer for testing
