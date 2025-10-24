@@ -16,11 +16,9 @@ public actor AudioPlayer {
 
     private var _isPlaying: Bool = false
 
-    // Use NSLock for thread-safe access from AudioQueue callback (nonisolated)
-    // Both lock and data must be nonisolated since we manage thread-safety manually
-    private nonisolated let pendingChunksLock = NSLock()
-    private nonisolated(unsafe) var pendingChunks: [(timestamp: Int64, data: Data)] = []
-    private let maxPendingChunks = 50
+    // Simplified PCM buffer queue - AudioScheduler handles timing
+    private nonisolated let pcmBufferLock = NSLock()
+    private nonisolated(unsafe) var pcmBuffer: [Data] = []
 
     private var currentVolume: Float = 1.0
     private var isMuted: Bool = false
@@ -104,7 +102,6 @@ public actor AudioPlayer {
         }
 
         // Start the queue AFTER buffers are enqueued
-        print("[AUDIO] Starting AudioQueue with \(3) primed buffers")
         AudioQueueStart(queue, nil)
         _isPlaying = true
     }
@@ -121,59 +118,10 @@ public actor AudioPlayer {
         currentFormat = nil
         _isPlaying = false
 
-        // Clear pending chunks to prevent stale audio on restart (using withLock for async context)
-        pendingChunksLock.withLock {
-            pendingChunks.removeAll()
+        // Clear PCM buffer to prevent stale audio on restart
+        pcmBufferLock.withLock {
+            pcmBuffer.removeAll()
         }
-    }
-
-    /// Enqueue audio chunk for playback
-    public func enqueue(chunk: BinaryMessage) async throws {
-        guard audioQueue != nil else {
-            throw AudioPlayerError.notStarted
-        }
-
-        // Decode chunk data
-        guard let decoder = decoder else {
-            throw AudioPlayerError.notStarted
-        }
-
-        let pcmData = try decoder.decode(chunk.data)
-
-        // Convert server timestamp to local time
-        let localTimestamp = await clockSync.serverTimeToLocal(chunk.timestamp)
-
-        // Check if chunk is late (timestamp in the past)
-        let now = getCurrentMicroseconds()
-        if localTimestamp < now {
-            // Drop late chunk to maintain sync
-            return
-        }
-
-        // Check buffer capacity
-        let hasCapacity = await bufferManager.hasCapacity(pcmData.count)
-        guard hasCapacity else {
-            // Backpressure - don't accept chunk
-            throw AudioPlayerError.bufferFull
-        }
-
-        // Register with buffer manager
-        let duration = calculateDuration(bytes: pcmData.count)
-        await bufferManager.register(endTimeMicros: localTimestamp + duration, byteCount: pcmData.count)
-
-        // Store pending chunk (thread-safe) using withLock for async context
-        let count = pendingChunksLock.withLock {
-            pendingChunks.append((timestamp: localTimestamp, data: pcmData))
-
-            // Limit pending queue size
-            if pendingChunks.count > maxPendingChunks {
-                pendingChunks.removeFirst()
-            }
-
-            return pendingChunks.count
-        }
-
-        print("[AUDIO] Enqueued chunk: \(pcmData.count) bytes, timestamp: \(localTimestamp), pending: \(count)")
     }
 
     /// Decode compressed audio data to PCM
@@ -190,91 +138,46 @@ public actor AudioPlayer {
             throw AudioPlayerError.notStarted
         }
 
-        // Add to pending chunks for AudioQueue callback to consume
-        let now = getCurrentMicroseconds()
-
-        pendingChunksLock.withLock {
-            // Don't use timestamps for scheduled playback - chunks arrive at correct time
-            pendingChunks.append((timestamp: now, data: pcmData))
-
-            if pendingChunks.count > maxPendingChunks {
-                pendingChunks.removeFirst()
-            }
+        // Add to PCM buffer for AudioQueue callback to consume
+        // AudioScheduler already handles timing, we just queue for playback
+        pcmBufferLock.withLock {
+            pcmBuffer.append(pcmData)
         }
     }
 
-    private func calculateDuration(bytes: Int) -> Int64 {
-        guard let format = currentFormat else { return 0 }
-
-        let bytesPerSample = format.channels * format.bitDepth / 8
-        let samples = bytes / bytesPerSample
-        let seconds = Double(samples) / Double(format.sampleRate)
-
-        return Int64(seconds * 1_000_000)  // Convert to microseconds
-    }
-
-    private func getCurrentMicroseconds() -> Int64 {
-        let timebase = mach_timebase_info()
-        var info = timebase
-        mach_timebase_info(&info)
-
-        let nanos = mach_absolute_time() * UInt64(info.numer) / UInt64(info.denom)
-        return Int64(nanos / 1000)  // Convert to microseconds
-    }
-
     nonisolated fileprivate func fillBuffer(queue: AudioQueueRef, buffer: AudioQueueBufferRef) {
-        // Synchronously get next chunk - this is safe because AudioQueue manages its own thread
-        let chunkData = getNextChunkSync()
+        // Get next PCM data from buffer (AudioScheduler handles timing)
+        let pcmData = getNextPCMDataSync()
 
-        guard let chunk = chunkData else {
+        guard let data = pcmData else {
             // No data available - enqueue silence
-            print("[AUDIO] No chunk available, enqueueing silence")
             memset(buffer.pointee.mAudioData, 0, Int(buffer.pointee.mAudioDataBytesCapacity))
             buffer.pointee.mAudioDataByteSize = buffer.pointee.mAudioDataBytesCapacity
             AudioQueueEnqueueBuffer(queue, buffer, 0, nil)
             return
         }
 
-        print("[AUDIO] Filling buffer with \(chunk.data.count) bytes at timestamp \(chunk.timestamp)")
-
-        // Copy chunk data to buffer
-        let copySize = min(chunk.data.count, Int(buffer.pointee.mAudioDataBytesCapacity))
-        _ = chunk.data.withUnsafeBytes { srcBytes in
+        // Copy PCM data to buffer
+        let copySize = min(data.count, Int(buffer.pointee.mAudioDataBytesCapacity))
+        _ = data.withUnsafeBytes { srcBytes in
             memcpy(buffer.pointee.mAudioData, srcBytes.baseAddress, copySize)
         }
 
         buffer.pointee.mAudioDataByteSize = UInt32(copySize)
 
-        // Enqueue buffer for immediate playback
-        // TODO: For synchronized playback, we need to properly convert chunk.timestamp
-        // to AudioQueue time using AudioQueueGetCurrentTime and calculate offset
+        // Enqueue buffer for immediate playback (timing handled by scheduler)
         AudioQueueEnqueueBuffer(queue, buffer, 0, nil)
-        print("[AUDIO] Buffer enqueued for immediate playback")
-
-        // Update buffer manager asynchronously
-        pruneBufferAsync()
     }
 
-    private nonisolated func getNextChunkSync() -> (timestamp: Int64, data: Data)? {
+    private nonisolated func getNextPCMDataSync() -> Data? {
         // Thread-safe access using NSLock - can be called from any thread
-        pendingChunksLock.lock()
-        defer { pendingChunksLock.unlock() }
+        pcmBufferLock.lock()
+        defer { pcmBufferLock.unlock() }
 
-        guard !pendingChunks.isEmpty else {
+        guard !pcmBuffer.isEmpty else {
             return nil
         }
-        return pendingChunks.removeFirst()
-    }
-
-    private nonisolated func pruneBufferAsync() {
-        // Schedule buffer pruning on the actor
-        Task {
-            await self.pruneBuffer()
-        }
-    }
-
-    private func pruneBuffer() async {
-        await bufferManager.pruneConsumed(nowMicros: getCurrentMicroseconds())
+        return pcmBuffer.removeFirst()
     }
 
     /// Set volume (0.0 to 1.0)
@@ -304,15 +207,11 @@ public actor AudioPlayer {
 
 // AudioQueue callback (C function)
 private let audioQueueCallback: AudioQueueOutputCallback = { userData, queue, buffer in
-    print("[AUDIO] Callback invoked! Buffer needs refilling")
     guard let userData = userData else {
-        print("[AUDIO] ERROR: userData is nil in callback")
         return
     }
 
     let player = Unmanaged<AudioPlayer>.fromOpaque(userData).takeUnretainedValue()
-
-    // Call nonisolated method directly from callback
     player.fillBuffer(queue: queue, buffer: buffer)
 }
 
