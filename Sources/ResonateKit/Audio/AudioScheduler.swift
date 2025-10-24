@@ -159,16 +159,23 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
 
         timerTask = Task {
             while !Task.isCancelled {
-                await checkQueue()
+                checkQueue()
                 try? await Task.sleep(for: .milliseconds(10))
             }
         }
     }
 
-    /// Stop the scheduler and clear queue
+    /// Stop the scheduler timer (but keep stream alive for next start)
     public func stop() {
         timerTask?.cancel()
         timerTask = nil
+        // Don't call chunkContinuation.finish() here - that would permanently
+        // close the AsyncStream. We need to keep it alive for multiple stream cycles.
+    }
+
+    /// Permanently finish the scheduler (call on disconnect only)
+    public func finish() {
+        stop()
         chunkContinuation.finish()
     }
 

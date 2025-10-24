@@ -205,10 +205,10 @@ public final class ResonateClient {
             await audioPlayer.stop()
         }
 
-        // Stop and clear scheduler
+        // Finish scheduler permanently on disconnect
         if audioScheduler != nil {
-            print("[CLIENT] Stopping AudioScheduler on disconnect")
-            await audioScheduler?.stop()
+            print("[CLIENT] Finishing AudioScheduler on disconnect")
+            await audioScheduler?.finish()
             print("[CLIENT] Clearing AudioScheduler queue on disconnect")
             await audioScheduler?.clear()
         }
