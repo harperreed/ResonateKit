@@ -432,7 +432,7 @@ public final class ResonateClient {
         print("[DEBUG] Binary message type: \(message.type) timestamp: \(message.timestamp) data: \(message.data.count) bytes")
 
         switch message.type {
-        case .audioChunk:
+        case .audioChunk, .audioChunkAlt:
             await handleAudioChunk(message)
 
         case .artworkChannel0, .artworkChannel1, .artworkChannel2, .artworkChannel3:

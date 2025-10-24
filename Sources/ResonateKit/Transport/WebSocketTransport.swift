@@ -26,6 +26,11 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
 
         case .disconnected(let reason, let code):
             print("[STARSCREAM] WebSocket disconnected: \(reason) (code: \(code))")
+            // If we were waiting for connection, fail it
+            if let continuation = connectionContinuation {
+                continuation.resume(throwing: TransportError.connectionFailed)
+                connectionContinuation = nil
+            }
             textContinuation.finish()
             binaryContinuation.finish()
 
@@ -51,6 +56,11 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
 
         case .cancelled:
             print("[STARSCREAM] WebSocket cancelled")
+            // If we were waiting for connection, fail it
+            if let continuation = connectionContinuation {
+                continuation.resume(throwing: TransportError.connectionFailed)
+                connectionContinuation = nil
+            }
             textContinuation.finish()
             binaryContinuation.finish()
 
@@ -65,6 +75,11 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
 
         case .peerClosed:
             print("[STARSCREAM] Peer closed connection")
+            // If we were waiting for connection, fail it
+            if let continuation = connectionContinuation {
+                continuation.resume(throwing: TransportError.connectionFailed)
+                connectionContinuation = nil
+            }
             textContinuation.finish()
             binaryContinuation.finish()
         }

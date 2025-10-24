@@ -8,6 +8,7 @@ import Foundation
 public enum BinaryMessageType: UInt8, Sendable {
     // Player role (000000xx)
     case audioChunk = 0
+    case audioChunkAlt = 1  // Alternative audio chunk slot (observed in server)
 
     // Artwork role (000001xx)
     case artworkChannel0 = 4
@@ -32,8 +33,16 @@ public struct BinaryMessage: Sendable {
     /// - Parameter data: Raw WebSocket binary frame
     /// - Returns: Decoded message or nil if invalid
     public init?(data: Data) {
-        guard data.count >= 9 else { return nil }
-        guard let type = BinaryMessageType(rawValue: data[0]) else { return nil }
+        guard data.count >= 9 else {
+            print("[BinaryMessage] Parse failed: too short (\(data.count) bytes, need 9+)")
+            return nil
+        }
+
+        let typeValue = data[0]
+        guard let type = BinaryMessageType(rawValue: typeValue) else {
+            print("[BinaryMessage] Parse failed: unknown type \(typeValue)")
+            return nil
+        }
 
         self.type = type
 
@@ -43,9 +52,14 @@ public struct BinaryMessage: Sendable {
         }
 
         // Validate timestamp is non-negative (server should never send negative)
-        guard extractedTimestamp >= 0 else { return nil }
+        guard extractedTimestamp >= 0 else {
+            print("[BinaryMessage] Parse failed: negative timestamp \(extractedTimestamp)")
+            return nil
+        }
 
         self.timestamp = extractedTimestamp
         self.data = data.subdata(in: 9..<data.count)
+
+        print("[BinaryMessage] Successfully parsed: type=\(type) timestamp=\(extractedTimestamp) payloadSize=\(self.data.count)")
     }
 }
