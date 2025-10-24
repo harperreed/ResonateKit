@@ -21,6 +21,21 @@ public struct SchedulerStats: Sendable {
     }
 }
 
+/// Detailed statistics including queue size
+public struct DetailedSchedulerStats: Sendable {
+    public let received: Int
+    public let played: Int
+    public let dropped: Int
+    public let queueSize: Int
+
+    public init(received: Int = 0, played: Int = 0, dropped: Int = 0, queueSize: Int = 0) {
+        self.received = received
+        self.played = played
+        self.dropped = dropped
+        self.queueSize = queueSize
+    }
+}
+
 /// A chunk scheduled for playback at a specific time
 public struct ScheduledChunk: Sendable {
     public let pcmData: Data
@@ -57,10 +72,21 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
 
     /// Schedule a PCM chunk for playback
     public func schedule(pcm: Data, serverTimestamp: Int64) async {
+        let receivedCount = schedulerStats.received
+
         // Convert server timestamp to local playback time
         let localTimeMicros = await clockSync.serverTimeToLocal(serverTimestamp)
         let localTimeSeconds = Double(localTimeMicros) / 1_000_000.0
         let playTime = Date(timeIntervalSince1970: localTimeSeconds)
+
+        // Log first 10 chunks with detailed timing info
+        if receivedCount < 10 {
+            let now = Date()
+            let delay = playTime.timeIntervalSince(now)
+            let delayMs = Int(delay * 1000)
+
+            print("[SCHEDULER] Chunk #\(receivedCount): server_ts=\(serverTimestamp)μs, delay=\(delayMs)ms, queue_size=\(queue.count)")
+        }
 
         let chunk = ScheduledChunk(
             pcmData: pcm,
@@ -115,6 +141,16 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
     /// Get current statistics
     public var stats: SchedulerStats {
         return schedulerStats
+    }
+
+    /// Get detailed statistics including queue size
+    public func getDetailedStats() -> DetailedSchedulerStats {
+        return DetailedSchedulerStats(
+            received: schedulerStats.received,
+            played: schedulerStats.played,
+            dropped: schedulerStats.dropped,
+            queueSize: queue.count
+        )
     }
 
     /// Start the scheduling timer loop

@@ -155,6 +155,11 @@ public final class ResonateClient {
             await self?.runSchedulerOutput()
         }
 
+        // Start scheduler stats logging (detached from MainActor)
+        Task.detached { [weak self] in
+            await self?.logSchedulerStats()
+        }
+
         // Update state (will be set to .connected when server/hello received)
     }
 
@@ -206,8 +211,12 @@ public final class ResonateClient {
         }
 
         // Stop and clear scheduler
-        await audioScheduler?.stop()
-        await audioScheduler?.clear()
+        if audioScheduler != nil {
+            print("[CLIENT] Stopping AudioScheduler on disconnect")
+            await audioScheduler?.stop()
+            print("[CLIENT] Clearing AudioScheduler queue on disconnect")
+            await audioScheduler?.clear()
+        }
 
         // Disconnect transport
         await transport?.disconnect()
@@ -366,6 +375,21 @@ public final class ResonateClient {
         }
     }
 
+    nonisolated private func logSchedulerStats() async {
+        while !Task.isCancelled {
+            // Wait 5 seconds between stats logs
+            try? await Task.sleep(for: .seconds(5))
+
+            guard let audioScheduler = await audioScheduler else { continue }
+            let detailedStats = await audioScheduler.getDetailedStats()
+
+            // Only log if we've received chunks
+            if detailedStats.received > 0 {
+                print("[CLIENT] Scheduler stats: received=\(detailedStats.received), played=\(detailedStats.played), dropped=\(detailedStats.dropped), queue_size=\(detailedStats.queueSize)")
+            }
+        }
+    }
+
     nonisolated private func handleTextMessage(_ text: String) async {
         // Debug logging
         print("[DEBUG] Received text message: \(text)")
@@ -477,6 +501,7 @@ public final class ResonateClient {
             playerSyncState = "synchronized"  // Successfully started
 
             // Start scheduler
+            print("[CLIENT] Starting AudioScheduler")
             await audioScheduler?.startScheduling()
 
             eventsContinuation.yield(.streamStarted(format))
@@ -491,7 +516,9 @@ public final class ResonateClient {
     private func handleStreamEnd(_ message: StreamEndMessage) async {
         guard let audioPlayer = audioPlayer else { return }
 
+        print("[CLIENT] Stopping AudioScheduler")
         await audioScheduler?.stop()
+        print("[CLIENT] Clearing AudioScheduler queue")
         await audioScheduler?.clear()
         await audioPlayer.stop()
         playerSyncState = "synchronized"  // Reset to clean state
