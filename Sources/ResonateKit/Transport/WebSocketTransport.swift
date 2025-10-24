@@ -8,6 +8,7 @@ import Starscream
 private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
     let textContinuation: AsyncStream<String>.Continuation
     let binaryContinuation: AsyncStream<Data>.Continuation
+    var connectionContinuation: CheckedContinuation<Void, Error>?
 
     init(textContinuation: AsyncStream<String>.Continuation, binaryContinuation: AsyncStream<Data>.Continuation) {
         self.textContinuation = textContinuation
@@ -20,6 +21,8 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
         switch event {
         case .connected(let headers):
             print("[STARSCREAM] WebSocket connected with headers: \(headers)")
+            connectionContinuation?.resume()
+            connectionContinuation = nil
 
         case .disconnected(let reason, let code):
             print("[STARSCREAM] WebSocket disconnected: \(reason) (code: \(code))")
@@ -53,6 +56,10 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
 
         case .error(let error):
             print("[STARSCREAM] WebSocket error: \(String(describing: error))")
+            if let continuation = connectionContinuation {
+                continuation.resume(throwing: TransportError.connectionFailed)
+                connectionContinuation = nil
+            }
             textContinuation.finish()
             binaryContinuation.finish()
 
@@ -96,7 +103,7 @@ public actor WebSocketTransport {
     }
 
     /// Connect to the WebSocket server
-    /// - Throws: TransportError if already connected
+    /// - Throws: TransportError if already connected or connection fails
     public func connect() async throws {
         // Prevent multiple connections
         guard webSocket == nil else {
@@ -117,9 +124,15 @@ public actor WebSocketTransport {
         self.webSocket = socket
 
         print("[TRANSPORT] Connecting to \(url)...")
-        socket.connect()
 
-        print("[TRANSPORT] Connection initiated")
+        // Wait for connection to complete
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            delegate.connectionContinuation = continuation
+            socket.connect()
+            print("[TRANSPORT] Connection initiated, waiting for connected event...")
+        }
+
+        print("[TRANSPORT] Connection established!")
     }
 
     /// Check if currently connected
@@ -168,4 +181,7 @@ public enum TransportError: Error {
 
     /// Already connected - call disconnect() before reconnecting
     case alreadyConnected
+
+    /// Connection failed during handshake
+    case connectionFailed
 }

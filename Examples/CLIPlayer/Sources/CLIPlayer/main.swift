@@ -143,6 +143,10 @@ final class CLIPlayer {
 
     deinit {
         eventTask?.cancel()
+        // Disconnect client on cleanup
+        Task { @MainActor [weak client] in
+            await client?.disconnect()
+        }
     }
 }
 
