@@ -274,7 +274,7 @@ drift = drift + 0.1 * (Double(residual) / dt)
 - Cancel tasks in `disconnect()` method alongside other task cancellation
 - Set to nil after cancellation for clean state
 
-**Commit:** [pending]
+**Commit:** 5e0c0b8
 
 ## Known Limitations
 
