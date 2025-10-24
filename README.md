@@ -63,6 +63,22 @@ for await server in discovery.discoveredServers {
 // - Synchronized playback
 ```
 
+## Audio Synchronization
+
+ResonateKit uses timestamp-based audio scheduling to ensure precise synchronization:
+
+- **AudioScheduler**: Maintains priority queue of audio chunks sorted by playback time
+- **Clock Sync**: Compensates for clock drift using Kalman filter approach
+- **Playback Window**: ±50ms tolerance for network jitter
+- **Late Chunk Handling**: Automatically drops chunks >50ms late to maintain sync
+- **AsyncStream Pipeline**: Non-blocking chunk output for smooth playback
+
+The scheduler converts server timestamps to local playback times and ensures chunks play at their intended moment, not when they arrive from the network. This architecture matches the [Go reference implementation](https://github.com/harperreed/resonate-go).
+
+## Testing
+
+See [docs/TESTING.md](docs/TESTING.md) for manual testing procedures and validation checklist.
+
 ## License
 
 Apache 2.0
