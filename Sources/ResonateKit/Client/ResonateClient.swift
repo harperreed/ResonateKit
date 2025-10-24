@@ -30,6 +30,8 @@ public final class ResonateClient {
     // Task management
     private var messageLoopTask: Task<Void, Never>?
     private var clockSyncTask: Task<Void, Never>?
+    private var schedulerOutputTask: Task<Void, Never>?
+    private var schedulerStatsTask: Task<Void, Never>?
 
     // Event stream
     private let eventsContinuation: AsyncStream<ClientEvent>.Continuation
@@ -146,12 +148,12 @@ public final class ResonateClient {
         // Initial sync will be triggered in handleServerHello()
 
         // Start scheduler output consumer (detached from MainActor)
-        Task.detached { [weak self] in
+        schedulerOutputTask = Task.detached { [weak self] in
             await self?.runSchedulerOutput()
         }
 
         // Start scheduler stats logging (detached from MainActor)
-        Task.detached { [weak self] in
+        schedulerStatsTask = Task.detached { [weak self] in
             await self?.logSchedulerStats()
         }
 
@@ -194,11 +196,15 @@ public final class ResonateClient {
     /// Disconnect from server
     @MainActor
     public func disconnect() async {
-        // Cancel tasks
+        // Cancel all tasks
         messageLoopTask?.cancel()
         clockSyncTask?.cancel()
+        schedulerOutputTask?.cancel()
+        schedulerStatsTask?.cancel()
         messageLoopTask = nil
         clockSyncTask = nil
+        schedulerOutputTask = nil
+        schedulerStatsTask = nil
 
         // Stop audio
         if let audioPlayer = audioPlayer {

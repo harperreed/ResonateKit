@@ -257,6 +257,25 @@ drift = drift + 0.1 * (Double(residual) / dt)
 **Solution:** Removed `await` - checkQueue() is synchronous
 **Commit:** 7324495
 
+### Critical Bug #3: Task Memory Leak
+**Discovered:** 2025-10-24 during third careful code review
+**Location:** `ResonateClient.connect()` lines 151-158
+**Problem:** Scheduler output and stats tasks were created with `Task.detached` but never stored or cancelled. This caused:
+- Memory leak: Tasks run forever and cannot be cancelled
+- Zombie tasks: After disconnect, old tasks keep running
+- Multiple instances: Each reconnect creates new tasks without stopping old ones
+- Resource waste: Old tasks keep polling for data that will never come
+
+**Impact:** Production systems would accumulate zombie tasks on each reconnect, eventually exhausting resources.
+
+**Solution:**
+- Added `schedulerOutputTask` and `schedulerStatsTask` properties to store task references
+- Assigned tasks when creating them: `schedulerOutputTask = Task.detached { ... }`
+- Cancel tasks in `disconnect()` method alongside other task cancellation
+- Set to nil after cancellation for clean state
+
+**Commit:** [pending]
+
 ## Known Limitations
 
 1. **Simplified Kalman Filter:** Uses fixed gain (0.1) instead of full covariance tracking
