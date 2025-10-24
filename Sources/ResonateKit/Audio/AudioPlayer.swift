@@ -16,7 +16,10 @@ public actor AudioPlayer {
 
     private var _isPlaying: Bool = false
 
-    private var pendingChunks: [(timestamp: Int64, data: Data)] = []
+    // Use NSLock for thread-safe access from AudioQueue callback (nonisolated)
+    // Both lock and data must be nonisolated since we manage thread-safety manually
+    private nonisolated let pendingChunksLock = NSLock()
+    private nonisolated(unsafe) var pendingChunks: [(timestamp: Int64, data: Data)] = []
     private let maxPendingChunks = 50
 
     private var currentVolume: Float = 1.0
@@ -88,11 +91,7 @@ public actor AudioPlayer {
         self.audioQueue = queue
         self.currentFormat = format
 
-        // Start the queue
-        AudioQueueStart(queue, nil)
-        _isPlaying = true
-
-        // Allocate buffers
+        // Allocate and prime buffers BEFORE starting the queue
         let bufferSize: UInt32 = 16384  // 16KB per buffer
         for _ in 0..<3 {  // 3 buffers for smooth playback
             var buffer: AudioQueueBufferRef?
@@ -103,6 +102,11 @@ public actor AudioPlayer {
                 fillBuffer(queue: queue, buffer: buffer)
             }
         }
+
+        // Start the queue AFTER buffers are enqueued
+        print("[AUDIO] Starting AudioQueue with \(3) primed buffers")
+        AudioQueueStart(queue, nil)
+        _isPlaying = true
     }
 
     /// Stop playback and clean up
@@ -116,7 +120,11 @@ public actor AudioPlayer {
         decoder = nil
         currentFormat = nil
         _isPlaying = false
-        pendingChunks.removeAll()  // Clear pending chunks to prevent stale audio on restart
+
+        // Clear pending chunks to prevent stale audio on restart (using withLock for async context)
+        pendingChunksLock.withLock {
+            pendingChunks.removeAll()
+        }
     }
 
     /// Enqueue audio chunk for playback
@@ -153,12 +161,37 @@ public actor AudioPlayer {
         let duration = calculateDuration(bytes: pcmData.count)
         await bufferManager.register(endTimeMicros: localTimestamp + duration, byteCount: pcmData.count)
 
-        // Store pending chunk
-        pendingChunks.append((timestamp: localTimestamp, data: pcmData))
+        // Store pending chunk (thread-safe) using withLock for async context
+        let count = pendingChunksLock.withLock {
+            pendingChunks.append((timestamp: localTimestamp, data: pcmData))
 
-        // Limit pending queue size
-        if pendingChunks.count > maxPendingChunks {
-            pendingChunks.removeFirst()
+            // Limit pending queue size
+            if pendingChunks.count > maxPendingChunks {
+                pendingChunks.removeFirst()
+            }
+
+            return pendingChunks.count
+        }
+
+        print("[AUDIO] Enqueued chunk: \(pcmData.count) bytes, timestamp: \(localTimestamp), pending: \(count)")
+    }
+
+    /// Play PCM data directly (for scheduled playback)
+    public func playPCM(_ pcmData: Data) async throws {
+        guard audioQueue != nil, currentFormat != nil else {
+            throw AudioPlayerError.notStarted
+        }
+
+        // Add to pending chunks for AudioQueue callback to consume
+        let now = getCurrentMicroseconds()
+
+        pendingChunksLock.withLock {
+            // Don't use timestamps for scheduled playback - chunks arrive at correct time
+            pendingChunks.append((timestamp: now, data: pcmData))
+
+            if pendingChunks.count > maxPendingChunks {
+                pendingChunks.removeFirst()
+            }
         }
     }
 
@@ -187,11 +220,14 @@ public actor AudioPlayer {
 
         guard let chunk = chunkData else {
             // No data available - enqueue silence
+            print("[AUDIO] No chunk available, enqueueing silence")
             memset(buffer.pointee.mAudioData, 0, Int(buffer.pointee.mAudioDataBytesCapacity))
             buffer.pointee.mAudioDataByteSize = buffer.pointee.mAudioDataBytesCapacity
             AudioQueueEnqueueBuffer(queue, buffer, 0, nil)
             return
         }
+
+        print("[AUDIO] Filling buffer with \(chunk.data.count) bytes at timestamp \(chunk.timestamp)")
 
         // Copy chunk data to buffer
         let copySize = min(chunk.data.count, Int(buffer.pointee.mAudioDataBytesCapacity))
@@ -201,45 +237,25 @@ public actor AudioPlayer {
 
         buffer.pointee.mAudioDataByteSize = UInt32(copySize)
 
-        // Calculate playback time
-        let playbackTime = AudioTimeStamp(
-            mSampleTime: 0,
-            mHostTime: UInt64(chunk.timestamp * 1000),  // Convert microseconds to nanoseconds
-            mRateScalar: 1.0,
-            mWordClockTime: 0,
-            mSMPTETime: SMPTETime(),
-            mFlags: [.hostTimeValid],
-            mReserved: 0
-        )
-
-        // Enqueue buffer with timestamp
-        var time = playbackTime
-        AudioQueueEnqueueBufferWithParameters(
-            queue,
-            buffer,
-            0,
-            nil,
-            0,
-            0,
-            0,
-            nil,
-            &time,
-            nil
-        )
+        // Enqueue buffer for immediate playback
+        // TODO: For synchronized playback, we need to properly convert chunk.timestamp
+        // to AudioQueue time using AudioQueueGetCurrentTime and calculate offset
+        AudioQueueEnqueueBuffer(queue, buffer, 0, nil)
+        print("[AUDIO] Buffer enqueued for immediate playback")
 
         // Update buffer manager asynchronously
         pruneBufferAsync()
     }
 
     private nonisolated func getNextChunkSync() -> (timestamp: Int64, data: Data)? {
-        // Use assumeIsolated to safely access actor state from AudioQueue thread
-        // This is safe because AudioQueue serializes callbacks
-        return assumeIsolated { actor in
-            guard !actor.pendingChunks.isEmpty else {
-                return nil
-            }
-            return actor.pendingChunks.removeFirst()
+        // Thread-safe access using NSLock - can be called from any thread
+        pendingChunksLock.lock()
+        defer { pendingChunksLock.unlock() }
+
+        guard !pendingChunks.isEmpty else {
+            return nil
         }
+        return pendingChunks.removeFirst()
     }
 
     private nonisolated func pruneBufferAsync() {
@@ -280,7 +296,11 @@ public actor AudioPlayer {
 
 // AudioQueue callback (C function)
 private let audioQueueCallback: AudioQueueOutputCallback = { userData, queue, buffer in
-    guard let userData = userData else { return }
+    print("[AUDIO] Callback invoked! Buffer needs refilling")
+    guard let userData = userData else {
+        print("[AUDIO] ERROR: userData is nil in callback")
+        return
+    }
 
     let player = Unmanaged<AudioPlayer>.fromOpaque(userData).takeUnretainedValue()
 

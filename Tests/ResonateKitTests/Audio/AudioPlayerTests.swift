@@ -62,4 +62,30 @@ struct AudioPlayerTests {
         // Should not throw
         try await player.enqueue(chunk: message)
     }
+
+    @Test("Play PCM data directly")
+    func testPlayPCM() async throws {
+        let bufferManager = BufferManager(capacity: 1_048_576)
+        let clockSync = ClockSynchronizer()
+        let player = AudioPlayer(bufferManager: bufferManager, clockSync: clockSync)
+
+        let format = AudioFormatSpec(
+            codec: .pcm,
+            channels: 2,
+            sampleRate: 48000,
+            bitDepth: 16
+        )
+
+        try await player.start(format: format, codecHeader: nil)
+
+        // Create 1 second of silence
+        let bytesPerSample = format.channels * format.bitDepth / 8
+        let samplesPerSecond = format.sampleRate
+        let pcmData = Data(repeating: 0, count: samplesPerSecond * bytesPerSample)
+
+        // Should not throw
+        try await player.playPCM(pcmData)
+
+        await player.stop()
+    }
 }
