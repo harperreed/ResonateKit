@@ -23,6 +23,7 @@ public final class ResonateClient {
     // Dependencies
     private var transport: WebSocketTransport?
     private var clockSync: ClockSynchronizer?
+    private var audioScheduler: AudioScheduler<ClockSynchronizer>?
     private var bufferManager: BufferManager?
     private var audioPlayer: AudioPlayer?
 
@@ -57,6 +58,43 @@ public final class ResonateClient {
         eventsContinuation.finish()
     }
 
+    /// Discover Resonate servers on the local network
+    /// - Parameter timeout: How long to search for servers (default: 3 seconds)
+    /// - Returns: Array of discovered servers
+    public nonisolated static func discoverServers(timeout: Duration = .seconds(3)) async -> [DiscoveredServer] {
+        let discovery = ServerDiscovery()
+        await discovery.startDiscovery()
+
+        return await withTaskGroup(of: [DiscoveredServer].self) { group in
+            var latestServers: [DiscoveredServer] = []
+
+            // Collect servers for the timeout period
+            group.addTask {
+                var collected: [DiscoveredServer] = []
+                for await discoveredServers in discovery.servers {
+                    collected = discoveredServers
+                }
+                return collected
+            }
+
+            // Timeout task
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                await discovery.stopDiscovery()
+                return []
+            }
+
+            // Wait for all tasks and collect results
+            for await result in group {
+                if !result.isEmpty {
+                    latestServers = result
+                }
+            }
+
+            return latestServers
+        }
+    }
+
     /// Connect to Resonate server
     @MainActor
     public func connect(to url: URL) async throws {
@@ -70,9 +108,11 @@ public final class ResonateClient {
         // Create dependencies
         let transport = WebSocketTransport(url: url)
         let clockSync = ClockSynchronizer()
+        let audioScheduler = AudioScheduler(clockSync: clockSync)
 
         self.transport = transport
         self.clockSync = clockSync
+        self.audioScheduler = audioScheduler
 
         // Create buffer manager and audio player if player role
         if roles.contains(.player), let playerConfig = playerConfig {
@@ -93,17 +133,62 @@ public final class ResonateClient {
         // Send client/hello
         try await sendClientHello()
 
-        // Start message loop
-        messageLoopTask = Task {
-            await runMessageLoop()
+        // Capture streams before detaching (they're nonisolated)
+        let textStream = transport.textMessages
+        let binaryStream = transport.binaryMessages
+
+        // Start message loop (detached from MainActor)
+        messageLoopTask = Task.detached { [weak self] in
+            await self?.runMessageLoop(textStream: textStream, binaryStream: binaryStream)
         }
 
-        // Start clock sync
-        clockSyncTask = Task {
-            await runClockSync()
+        // Perform initial clock synchronization before starting continuous sync
+        try await performInitialSync()
+
+        // Start clock sync loop (detached from MainActor)
+        clockSyncTask = Task.detached { [weak self] in
+            await self?.runClockSync()
+        }
+
+        // Start scheduler output consumer (detached from MainActor)
+        Task.detached { [weak self] in
+            await self?.runSchedulerOutput()
         }
 
         // Update state (will be set to .connected when server/hello received)
+    }
+
+    /// Perform initial clock synchronization
+    /// Does multiple sync rounds to establish offset and drift before audio starts
+    @MainActor
+    private func performInitialSync() async throws {
+        guard let transport = transport, let clockSync = clockSync else {
+            throw ResonateClientError.notConnected
+        }
+
+        print("[CLIENT] Performing initial clock synchronization...")
+
+        // Do 5 quick sync rounds to establish offset and drift
+        for _ in 0..<5 {
+            let now = getCurrentMicroseconds()
+
+            let payload = ClientTimePayload(clientTransmitted: now)
+            let message = ClientTimeMessage(payload: payload)
+
+            try await transport.send(message)
+
+            // Wait briefly for response (up to 500ms)
+            // Note: Response will be processed by message loop
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+
+        // Wait a bit more to ensure last responses are processed
+        try? await Task.sleep(for: .milliseconds(200))
+
+        let offset = await clockSync.statsOffset
+        let rtt = await clockSync.statsRtt
+        let quality = await clockSync.statsQuality
+        print("[CLIENT] Initial clock sync complete: offset=\(offset)μs, rtt=\(rtt)μs, quality=\(quality)")
     }
 
     /// Disconnect from server
@@ -120,12 +205,17 @@ public final class ResonateClient {
             await audioPlayer.stop()
         }
 
+        // Stop and clear scheduler
+        await audioScheduler?.stop()
+        await audioScheduler?.clear()
+
         // Disconnect transport
         await transport?.disconnect()
 
         // Clean up
         transport = nil
         clockSync = nil
+        audioScheduler = nil
         bufferManager = nil
         audioPlayer = nil
 
@@ -181,44 +271,66 @@ public final class ResonateClient {
         // Convert volume from 0.0-1.0 to 0-100 (with rounding)
         let volumeInt = Int((currentVolume * 100).rounded())
 
-        let playerState = PlayerState(
+        let payload = PlayerUpdatePayload(
             state: playerSyncState,
             volume: volumeInt,
             muted: currentMuted
         )
 
-        let payload = ClientStatePayload(player: playerState)
-        let message = ClientStateMessage(payload: payload)
+        let message = PlayerUpdateMessage(payload: payload)
 
         try await transport.send(message)
     }
 
-    private func runMessageLoop() async {
-        guard let transport = transport else { return }
+    nonisolated private func runMessageLoop(
+        textStream: AsyncStream<String>,
+        binaryStream: AsyncStream<Data>
+    ) async {
+        print("[CLIENT] Starting message loop")
+        print("[CLIENT] Got streams, creating task group")
 
         await withTaskGroup(of: Void.self) { group in
+            print("[CLIENT] Task group created")
+
             // Text message handler
             group.addTask { [weak self] in
-                guard let self = self else { return }
+                print("[CLIENT] Text message task starting...")
+                guard let self = self else {
+                    print("[CLIENT] Self is nil in text task")
+                    return
+                }
+                print("[CLIENT] Text message handler started, beginning iteration")
 
-                for await text in transport.textMessages {
+                for await text in textStream {
+                    print("[CLIENT] Got text message in loop")
                     await self.handleTextMessage(text)
                 }
+                print("[CLIENT] Text message handler ended")
             }
 
             // Binary message handler
             group.addTask { [weak self] in
-                guard let self = self else { return }
+                print("[CLIENT] Binary message task starting...")
+                guard let self = self else {
+                    print("[CLIENT] Self is nil in binary task")
+                    return
+                }
+                print("[CLIENT] Binary message handler started, beginning iteration")
 
-                for await data in transport.binaryMessages {
+                for await data in binaryStream {
+                    print("[CLIENT] Got binary message in loop")
                     await self.handleBinaryMessage(data)
                 }
+                print("[CLIENT] Binary message handler ended")
             }
+
+            print("[CLIENT] Both tasks added to group")
         }
+        print("[CLIENT] Message loop exited")
     }
 
-    private func runClockSync() async {
-        guard let transport = transport else { return }
+    nonisolated private func runClockSync() async {
+        guard let transport = await transport else { return }
 
         while !Task.isCancelled {
             // Send client/time every 5 seconds
@@ -239,7 +351,25 @@ public final class ResonateClient {
         }
     }
 
-    private func handleTextMessage(_ text: String) async {
+    nonisolated private func runSchedulerOutput() async {
+        guard let audioScheduler = await audioScheduler,
+              let audioPlayer = await audioPlayer else {
+            return
+        }
+
+        for await chunk in audioScheduler.scheduledChunks {
+            do {
+                try await audioPlayer.playPCM(chunk.pcmData)
+            } catch {
+                print("[CLIENT] Failed to play scheduled chunk: \(error)")
+            }
+        }
+    }
+
+    nonisolated private func handleTextMessage(_ text: String) async {
+        // Debug logging
+        print("[DEBUG] Received text message: \(text)")
+
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
 
@@ -261,13 +391,20 @@ public final class ResonateClient {
             await handleStreamEnd(message)
         } else if let message = try? decoder.decode(GroupUpdateMessage.self, from: data) {
             await handleGroupUpdate(message)
+        } else {
+            print("[DEBUG] Failed to decode message: \(text)")
         }
     }
 
-    private func handleBinaryMessage(_ data: Data) async {
+    nonisolated private func handleBinaryMessage(_ data: Data) async {
+        print("[DEBUG] Received binary message: \(data.count) bytes")
+
         guard let message = BinaryMessage(data: data) else {
+            print("[DEBUG] Failed to parse binary message")
             return
         }
+
+        print("[DEBUG] Binary message type: \(message.type) timestamp: \(message.timestamp) data: \(message.data.count) bytes")
 
         switch message.type {
         case .audioChunk:
@@ -338,6 +475,10 @@ public final class ResonateClient {
         do {
             try await audioPlayer.start(format: format, codecHeader: codecHeader)
             playerSyncState = "synchronized"  // Successfully started
+
+            // Start scheduler
+            await audioScheduler?.startScheduling()
+
             eventsContinuation.yield(.streamStarted(format))
             try? await sendClientState()  // Notify server of synchronized state
         } catch {
@@ -350,6 +491,8 @@ public final class ResonateClient {
     private func handleStreamEnd(_ message: StreamEndMessage) async {
         guard let audioPlayer = audioPlayer else { return }
 
+        await audioScheduler?.stop()
+        await audioScheduler?.clear()
         await audioPlayer.stop()
         playerSyncState = "synchronized"  // Reset to clean state
         eventsContinuation.yield(.streamEnded)
@@ -369,16 +512,21 @@ public final class ResonateClient {
     }
 
     private func handleAudioChunk(_ message: BinaryMessage) async {
-        guard let audioPlayer = audioPlayer else { return }
+        guard let audioPlayer = audioPlayer,
+              let audioScheduler = audioScheduler else { return }
 
         do {
-            try await audioPlayer.enqueue(chunk: message)
+            // Decode chunk within AudioPlayer actor
+            let pcmData = try await audioPlayer.decode(message.data)
+
+            // Schedule for playback instead of immediate enqueue
+            await audioScheduler.schedule(pcm: pcmData, serverTimestamp: message.timestamp)
         } catch {
-            // Log but continue - dropping chunks is acceptable for sync
+            print("[DEBUG] Failed to decode/schedule chunk: \(error)")
         }
     }
 
-    private func getCurrentMicroseconds() -> Int64 {
+    nonisolated private func getCurrentMicroseconds() -> Int64 {
         var info = mach_timebase_info()
         mach_timebase_info(&info)
 

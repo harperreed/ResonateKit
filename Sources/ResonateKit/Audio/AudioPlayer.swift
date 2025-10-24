@@ -176,6 +176,14 @@ public actor AudioPlayer {
         print("[AUDIO] Enqueued chunk: \(pcmData.count) bytes, timestamp: \(localTimestamp), pending: \(count)")
     }
 
+    /// Decode compressed audio data to PCM
+    public func decode(_ data: Data) throws -> Data {
+        guard let decoder = decoder else {
+            throw AudioPlayerError.notStarted
+        }
+        return try decoder.decode(data)
+    }
+
     /// Play PCM data directly (for scheduled playback)
     public func playPCM(_ pcmData: Data) async throws {
         guard audioQueue != nil, currentFormat != nil else {
