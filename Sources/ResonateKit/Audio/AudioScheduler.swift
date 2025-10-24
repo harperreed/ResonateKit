@@ -43,11 +43,48 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
 
     /// Schedule a PCM chunk for playback
     public func schedule(pcm: Data, serverTimestamp: Int64) async {
+        // Convert server timestamp to local playback time
+        let localTimeMicros = await clockSync.serverTimeToLocal(serverTimestamp)
+        let localTimeSeconds = Double(localTimeMicros) / 1_000_000.0
+        let playTime = Date(timeIntervalSince1970: localTimeSeconds)
+
+        let chunk = ScheduledChunk(
+            pcmData: pcm,
+            playTime: playTime,
+            originalTimestamp: serverTimestamp
+        )
+
+        // Insert into sorted position
+        insertSorted(chunk)
+
         schedulerStats = SchedulerStats(
             received: schedulerStats.received + 1,
             played: schedulerStats.played,
             dropped: schedulerStats.dropped
         )
+    }
+
+    /// Insert chunk maintaining sorted order by playTime
+    private func insertSorted(_ chunk: ScheduledChunk) {
+        // Find the insertion point using binary search
+        var low = 0
+        var high = queue.count
+
+        while low < high {
+            let mid = (low + high) / 2
+            if queue[mid].playTime < chunk.playTime {
+                low = mid + 1
+            } else {
+                high = mid
+            }
+        }
+
+        queue.insert(chunk, at: low)
+    }
+
+    /// Get queued chunks (for testing)
+    public func getQueuedChunks() -> [ScheduledChunk] {
+        return queue
     }
 
     /// Get current statistics
