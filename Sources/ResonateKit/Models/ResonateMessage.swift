@@ -91,11 +91,20 @@ public enum PlayerCommand: String, Codable, Sendable {
 
 public struct PlayerSupport: Codable, Sendable {
     public let supportFormats: [AudioFormatSpec]
+    public let supportCodecs: [String]
+    public let supportChannels: [Int]
+    public let supportSampleRates: [Int]
+    public let supportBitDepth: [Int]
     public let bufferCapacity: Int
     public let supportedCommands: [PlayerCommand]
 
     public init(supportFormats: [AudioFormatSpec], bufferCapacity: Int, supportedCommands: [PlayerCommand]) {
         self.supportFormats = supportFormats
+        // Extract unique values from formats for Music Assistant compatibility
+        self.supportCodecs = Array(Set(supportFormats.map { $0.codec.rawValue })).sorted()
+        self.supportChannels = Array(Set(supportFormats.map { $0.channels })).sorted()
+        self.supportSampleRates = Array(Set(supportFormats.map { $0.sampleRate })).sorted()
+        self.supportBitDepth = Array(Set(supportFormats.map { $0.bitDepth })).sorted()
         self.bufferCapacity = bufferCapacity
         self.supportedCommands = supportedCommands
     }
@@ -187,25 +196,18 @@ public struct ServerTimePayload: Codable, Sendable {
 
 // MARK: - State Messages
 
-/// Client state message (sent by clients to report current state)
-public struct ClientStateMessage: ResonateMessage {
-    public let type = "client/state"
-    public let payload: ClientStatePayload
+/// Player state update message (sent by clients to report current state)
+/// Matches Go implementation which uses "player/update" message type
+public struct PlayerUpdateMessage: ResonateMessage {
+    public let type = "player/update"
+    public let payload: PlayerUpdatePayload
 
-    public init(payload: ClientStatePayload) {
+    public init(payload: PlayerUpdatePayload) {
         self.payload = payload
     }
 }
 
-public struct ClientStatePayload: Codable, Sendable {
-    public let player: PlayerState?
-
-    public init(player: PlayerState?) {
-        self.player = player
-    }
-}
-
-public struct PlayerState: Codable, Sendable {
+public struct PlayerUpdatePayload: Codable, Sendable {
     /// Synchronization state: "synchronized" or "error"
     public let state: String
     /// Volume level (0-100)
@@ -222,6 +224,14 @@ public struct PlayerState: Codable, Sendable {
         self.muted = muted
     }
 }
+
+// Legacy type aliases for backward compatibility
+@available(*, deprecated, renamed: "PlayerUpdateMessage", message: "Use PlayerUpdateMessage instead to match protocol spec")
+public typealias ClientStateMessage = PlayerUpdateMessage
+@available(*, deprecated, renamed: "PlayerUpdatePayload", message: "Use PlayerUpdatePayload instead to match protocol spec")
+public typealias ClientStatePayload = PlayerUpdatePayload
+@available(*, deprecated, renamed: "PlayerUpdatePayload", message: "Use PlayerUpdatePayload instead to match protocol spec")
+public typealias PlayerState = PlayerUpdatePayload
 
 // MARK: - Stream Messages
 

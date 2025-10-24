@@ -2,16 +2,73 @@
 // ABOUTME: Provides AsyncStreams for text (JSON) and binary messages
 
 import Foundation
+import Starscream
+
+// Delegate to handle WebSocket events and receiving
+private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
+    let textContinuation: AsyncStream<String>.Continuation
+    let binaryContinuation: AsyncStream<Data>.Continuation
+
+    init(textContinuation: AsyncStream<String>.Continuation, binaryContinuation: AsyncStream<Data>.Continuation) {
+        self.textContinuation = textContinuation
+        self.binaryContinuation = binaryContinuation
+        print("[STARSCREAM] Delegate initialized")
+    }
+
+    func didReceive(event: WebSocketEvent, client: any WebSocketClient) {
+        print("[STARSCREAM] didReceive called with event: \(event)")
+        switch event {
+        case .connected(let headers):
+            print("[STARSCREAM] WebSocket connected with headers: \(headers)")
+
+        case .disconnected(let reason, let code):
+            print("[STARSCREAM] WebSocket disconnected: \(reason) (code: \(code))")
+            textContinuation.finish()
+            binaryContinuation.finish()
+
+        case .text(let string):
+            print("[STARSCREAM] Received text message: \(string.prefix(100))...")
+            textContinuation.yield(string)
+
+        case .binary(let data):
+            print("[STARSCREAM] Received binary message: \(data.count) bytes")
+            binaryContinuation.yield(data)
+
+        case .ping(_):
+            print("[STARSCREAM] Received ping")
+
+        case .pong(_):
+            print("[STARSCREAM] Received pong")
+
+        case .viabilityChanged(let isViable):
+            print("[STARSCREAM] Viability changed: \(isViable)")
+
+        case .reconnectSuggested(let shouldReconnect):
+            print("[STARSCREAM] Reconnect suggested: \(shouldReconnect)")
+
+        case .cancelled:
+            print("[STARSCREAM] WebSocket cancelled")
+            textContinuation.finish()
+            binaryContinuation.finish()
+
+        case .error(let error):
+            print("[STARSCREAM] WebSocket error: \(String(describing: error))")
+            textContinuation.finish()
+            binaryContinuation.finish()
+
+        case .peerClosed:
+            print("[STARSCREAM] Peer closed connection")
+            textContinuation.finish()
+            binaryContinuation.finish()
+        }
+    }
+}
 
 /// WebSocket transport for Resonate protocol
 public actor WebSocketTransport {
-    private var webSocket: URLSessionWebSocketTask?
+    private nonisolated let delegate: StarscreamDelegate
+    private var webSocket: WebSocket?
     private let url: URL
-
-    private let textMessageContinuation: AsyncStream<String>.Continuation
-    private let binaryMessageContinuation: AsyncStream<Data>.Continuation
-
-    private var receiveTask: Task<Void, Never>?
 
     /// Stream of incoming text messages (JSON)
     public nonisolated let textMessages: AsyncStream<String>
@@ -20,9 +77,22 @@ public actor WebSocketTransport {
     public nonisolated let binaryMessages: AsyncStream<Data>
 
     public init(url: URL) {
-        self.url = url
-        (textMessages, textMessageContinuation) = AsyncStream.makeStream()
-        (binaryMessages, binaryMessageContinuation) = AsyncStream.makeStream()
+        // Ensure URL has proper WebSocket path if not specified
+        if url.path.isEmpty || url.path == "/" {
+            // Append recommended Resonate endpoint path
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+            self.url = components.url ?? url
+        } else {
+            self.url = url
+        }
+
+        // Create streams and pass continuations to delegate
+        let (textStream, textCont) = AsyncStream<String>.makeStream()
+        let (binaryStream, binaryCont) = AsyncStream<Data>.makeStream()
+
+        self.textMessages = textStream
+        self.binaryMessages = binaryStream
+        self.delegate = StarscreamDelegate(textContinuation: textCont, binaryContinuation: binaryCont)
     }
 
     /// Connect to the WebSocket server
@@ -33,17 +103,23 @@ public actor WebSocketTransport {
             throw TransportError.alreadyConnected
         }
 
-        let session = URLSession(configuration: .default)
-        webSocket = session.webSocketTask(with: url)
-        webSocket?.resume()
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5
 
-        // Start receive loops in a single structured task
-        receiveTask = Task {
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { await self.receiveTextMessages() }
-                group.addTask { await self.receiveBinaryMessages() }
-            }
-        }
+        // Create socket with delegate callbacks on background queue
+        // Note: Cannot use DispatchQueue.main in CLI apps without RunLoop
+        let socket = WebSocket(request: request)
+        socket.callbackQueue = DispatchQueue(label: "com.resonate.websocket", qos: .userInitiated)
+        socket.delegate = delegate
+
+        print("[TRANSPORT] Delegate set: \(socket.delegate != nil)")
+
+        self.webSocket = socket
+
+        print("[TRANSPORT] Connecting to \(url)...")
+        socket.connect()
+
+        print("[TRANSPORT] Connection initiated")
     }
 
     /// Check if currently connected
@@ -63,7 +139,8 @@ public actor WebSocketTransport {
         guard let text = String(data: data, encoding: .utf8) else {
             throw TransportError.encodingFailed
         }
-        try await webSocket.send(.string(text))
+        print("[TRANSPORT] Sending: \(text)")
+        webSocket.write(string: text)
     }
 
     /// Send a binary message
@@ -71,59 +148,13 @@ public actor WebSocketTransport {
         guard let webSocket = webSocket else {
             throw TransportError.notConnected
         }
-        try await webSocket.send(.data(data))
+        webSocket.write(data: data)
     }
 
     /// Disconnect from server
     public func disconnect() async {
-        receiveTask?.cancel()
-        receiveTask = nil
-
-        webSocket?.cancel(with: .goingAway, reason: nil)
+        webSocket?.disconnect()
         webSocket = nil
-
-        textMessageContinuation.finish()
-        binaryMessageContinuation.finish()
-    }
-
-    deinit {
-        // Clean up continuations if actor is deinitialized
-        textMessageContinuation.finish()
-        binaryMessageContinuation.finish()
-    }
-
-    private func receiveTextMessages() async {
-        // Check connection status on each iteration
-        while !Task.isCancelled {
-            guard let webSocket = webSocket else { break }
-
-            do {
-                let message = try await webSocket.receive()
-                if case .string(let text) = message {
-                    textMessageContinuation.yield(text)
-                }
-            } catch {
-                textMessageContinuation.finish()
-                break
-            }
-        }
-    }
-
-    private func receiveBinaryMessages() async {
-        // Check connection status on each iteration
-        while !Task.isCancelled {
-            guard let webSocket = webSocket else { break }
-
-            do {
-                let message = try await webSocket.receive()
-                if case .data(let data) = message {
-                    binaryMessageContinuation.yield(data)
-                }
-            } catch {
-                binaryMessageContinuation.finish()
-                break
-            }
-        }
     }
 }
 

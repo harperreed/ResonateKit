@@ -14,10 +14,15 @@ let package = Package(
             name: "ResonateKit",
             targets: ["ResonateKit"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/daltoniam/Starscream.git", from: "4.0.0")
+    ],
     targets: [
         .target(
             name: "ResonateKit",
-            dependencies: []),
+            dependencies: [
+                .product(name: "Starscream", package: "Starscream")
+            ]),
         .testTarget(
             name: "ResonateKitTests",
             dependencies: ["ResonateKit"]),

@@ -142,13 +142,8 @@ public final class ResonateClient {
             await self?.runMessageLoop(textStream: textStream, binaryStream: binaryStream)
         }
 
-        // Perform initial clock synchronization before starting continuous sync
-        try await performInitialSync()
-
-        // Start clock sync loop (detached from MainActor)
-        clockSyncTask = Task.detached { [weak self] in
-            await self?.runClockSync()
-        }
+        // Don't start clock sync yet - wait for server/hello first
+        // Initial sync will be triggered in handleServerHello()
 
         // Start scheduler output consumer (detached from MainActor)
         Task.detached { [weak self] in
@@ -456,6 +451,14 @@ public final class ResonateClient {
 
         // Send initial client state after receiving server hello (required by spec)
         try? await sendClientState()
+
+        // Now that handshake is complete, start clock synchronization
+        try? await performInitialSync()
+
+        // Start continuous clock sync loop
+        clockSyncTask = Task.detached { [weak self] in
+            await self?.runClockSync()
+        }
     }
 
     private func handleServerTime(_ message: ServerTimeMessage) async {
