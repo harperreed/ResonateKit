@@ -234,6 +234,29 @@ drift = drift + 0.1 * (Double(residual) / dt)
 
 **Legend:** ✅ = Implemented, ✅+ = Implemented with enhancements
 
+## Issues Found and Fixed During Code Review
+
+### Critical Bug #1: AsyncStream Lifecycle
+**Discovered:** 2025-10-24 during careful code review
+**Location:** `AudioScheduler.stop()`
+**Problem:** Calling `chunkContinuation.finish()` in `stop()` permanently closed the AsyncStream. When a stream ended (`handleStreamEnd`) and then a new one started (`handleStreamStart`), the scheduler would be broken because no chunks could ever be output again through the dead AsyncStream.
+
+**Impact:** Second and subsequent streams would have no audio output, even though chunks were being scheduled.
+
+**Solution:**
+- Split into `stop()` (cancels timer only) and `finish()` (permanently closes stream)
+- `stop()` keeps AsyncStream alive for multiple stream cycles
+- `finish()` only called on final disconnect
+- Now properly handles stream/start → stream/end → stream/start cycles
+
+**Commit:** 7324495
+
+### Minor Issue #2: Unnecessary Await
+**Location:** `AudioScheduler.startScheduling()` line 162
+**Problem:** Calling `await checkQueue()` on synchronous function caused compiler warning
+**Solution:** Removed `await` - checkQueue() is synchronous
+**Commit:** 7324495
+
 ## Known Limitations
 
 1. **Simplified Kalman Filter:** Uses fixed gain (0.1) instead of full covariance tracking
