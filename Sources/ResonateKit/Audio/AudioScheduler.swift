@@ -32,6 +32,7 @@ public struct ScheduledChunk: Sendable {
 public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
     private let clockSync: ClockSync
     private let playbackWindow: TimeInterval
+    private let maxQueueSize: Int
     private var queue: [ScheduledChunk] = []
     private var schedulerStats: SchedulerStats
     private var timerTask: Task<Void, Never>?
@@ -40,9 +41,14 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
     private let chunkContinuation: AsyncStream<ScheduledChunk>.Continuation
     public let scheduledChunks: AsyncStream<ScheduledChunk>
 
-    public init(clockSync: ClockSync, playbackWindow: TimeInterval = 0.05) {
+    public init(
+        clockSync: ClockSync,
+        playbackWindow: TimeInterval = 0.05,
+        maxQueueSize: Int = 100
+    ) {
         self.clockSync = clockSync
         self.playbackWindow = playbackWindow
+        self.maxQueueSize = maxQueueSize
         self.schedulerStats = SchedulerStats()
 
         // Create AsyncStream
@@ -61,6 +67,17 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
             playTime: playTime,
             originalTimestamp: serverTimestamp
         )
+
+        // Enforce queue size limit
+        while queue.count >= maxQueueSize {
+            queue.removeFirst()
+            schedulerStats = SchedulerStats(
+                received: schedulerStats.received,
+                played: schedulerStats.played,
+                dropped: schedulerStats.dropped + 1
+            )
+            print("[SCHEDULER] Queue overflow: dropped oldest chunk")
+        }
 
         // Insert into sorted position
         insertSorted(chunk)
@@ -117,6 +134,12 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
         timerTask?.cancel()
         timerTask = nil
         chunkContinuation.finish()
+    }
+
+    /// Clear all queued chunks
+    public func clear() {
+        queue.removeAll()
+        print("[SCHEDULER] Queue cleared")
     }
 
     /// Check queue and output ready chunks

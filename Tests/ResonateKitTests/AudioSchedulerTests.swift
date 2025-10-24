@@ -103,6 +103,48 @@ final class AudioSchedulerTests: XCTestCase {
         XCTAssertEqual(stats.dropped, 1)
         XCTAssertEqual(stats.played, 0)
     }
+
+    func testSchedulerEnforcesQueueLimit() async throws {
+        let clockSync = MockClockSynchronizer(offset: 0, drift: 0.0)
+        let scheduler = AudioScheduler(clockSync: clockSync, maxQueueSize: 5)
+
+        let future = Date().addingTimeInterval(10) // 10 seconds in future
+        let futureMicros = Int64(future.timeIntervalSince1970 * 1_000_000)
+
+        // Schedule 10 chunks (exceeds limit of 5)
+        for i in 0..<10 {
+            await scheduler.schedule(
+                pcm: Data([UInt8(i)]),
+                serverTimestamp: futureMicros + Int64(i * 1000)
+            )
+        }
+
+        let chunks = await scheduler.getQueuedChunks()
+        XCTAssertLessThanOrEqual(chunks.count, 5)
+
+        let stats = await scheduler.stats
+        XCTAssertEqual(stats.received, 10)
+        XCTAssertEqual(stats.dropped, 5) // Should have dropped oldest 5
+    }
+
+    func testSchedulerClearQueue() async throws {
+        let clockSync = MockClockSynchronizer(offset: 0, drift: 0.0)
+        let scheduler = AudioScheduler(clockSync: clockSync)
+
+        let future = Date().addingTimeInterval(10)
+        let futureMicros = Int64(future.timeIntervalSince1970 * 1_000_000)
+
+        await scheduler.schedule(pcm: Data([0x01]), serverTimestamp: futureMicros)
+        await scheduler.schedule(pcm: Data([0x02]), serverTimestamp: futureMicros + 1000)
+
+        var chunks = await scheduler.getQueuedChunks()
+        XCTAssertEqual(chunks.count, 2)
+
+        await scheduler.clear()
+
+        chunks = await scheduler.getQueuedChunks()
+        XCTAssertEqual(chunks.count, 0)
+    }
 }
 
 // Mock ClockSynchronizer for testing
