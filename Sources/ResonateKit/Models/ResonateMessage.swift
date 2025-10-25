@@ -30,6 +30,7 @@ public struct ClientHelloPayload: Codable, Sendable {
     public let version: Int
     public let supportedRoles: [ClientRole]
     public let playerSupport: PlayerSupport?
+    public let metadataSupport: MetadataSupport?
     public let artworkSupport: ArtworkSupport?
     public let visualizerSupport: VisualizerSupport?
 
@@ -40,6 +41,7 @@ public struct ClientHelloPayload: Codable, Sendable {
         version: Int,
         supportedRoles: [ClientRole],
         playerSupport: PlayerSupport?,
+        metadataSupport: MetadataSupport?,
         artworkSupport: ArtworkSupport?,
         visualizerSupport: VisualizerSupport?
     ) {
@@ -49,6 +51,7 @@ public struct ClientHelloPayload: Codable, Sendable {
         self.version = version
         self.supportedRoles = supportedRoles
         self.playerSupport = playerSupport
+        self.metadataSupport = metadataSupport
         self.artworkSupport = artworkSupport
         self.visualizerSupport = visualizerSupport
     }
@@ -107,6 +110,14 @@ public struct PlayerSupport: Codable, Sendable {
         self.supportBitDepth = Array(Set(supportFormats.map { $0.bitDepth })).sorted()
         self.bufferCapacity = bufferCapacity
         self.supportedCommands = supportedCommands
+    }
+}
+
+public struct MetadataSupport: Codable, Sendable {
+    public let supportPictureFormats: [String]
+
+    public init(supportPictureFormats: [String] = []) {
+        self.supportPictureFormats = supportPictureFormats
     }
 }
 
@@ -208,7 +219,7 @@ public struct PlayerUpdateMessage: ResonateMessage {
 }
 
 public struct PlayerUpdatePayload: Codable, Sendable {
-    /// Synchronization state: "synchronized" or "error"
+    /// Player state: "idle", "playing", "paused", "buffering", or "error"
     public let state: String
     /// Volume level (0-100)
     public let volume: Int
@@ -216,7 +227,9 @@ public struct PlayerUpdatePayload: Codable, Sendable {
     public let muted: Bool
 
     public init(state: String, volume: Int, muted: Bool) {
-        precondition(state == "synchronized" || state == "error", "State must be 'synchronized' or 'error'")
+        // Valid player states per Resonate protocol
+        let validStates = ["idle", "playing", "paused", "buffering", "error"]
+        precondition(validStates.contains(state), "State must be one of: \(validStates.joined(separator: ", "))")
         precondition(volume >= 0 && volume <= 100, "Volume must be between 0 and 100")
 
         self.state = state
@@ -319,5 +332,96 @@ public struct GroupUpdatePayload: Codable, Sendable {
         self.playbackState = playbackState
         self.groupId = groupId
         self.groupName = groupName
+    }
+}
+
+// MARK: - Metadata Messages
+
+/// Stream metadata message (basic track info)
+public struct StreamMetadataMessage: ResonateMessage {
+    public let type = "stream/metadata"
+    public let payload: StreamMetadataPayload
+
+    public init(payload: StreamMetadataPayload) {
+        self.payload = payload
+    }
+}
+
+public struct StreamMetadataPayload: Codable, Sendable {
+    public let title: String?
+    public let artist: String?
+    public let album: String?
+    public let artworkUrl: String?
+
+    public init(title: String?, artist: String?, album: String?, artworkUrl: String?) {
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.artworkUrl = artworkUrl
+    }
+}
+
+/// Session update message (comprehensive session state including metadata)
+public struct SessionUpdateMessage: ResonateMessage {
+    public let type = "session/update"
+    public let payload: SessionUpdatePayload
+
+    public init(payload: SessionUpdatePayload) {
+        self.payload = payload
+    }
+}
+
+public struct SessionUpdatePayload: Codable, Sendable {
+    public let groupId: String?
+    public let playbackState: String?
+    public let metadata: SessionMetadata?
+
+    public init(groupId: String?, playbackState: String?, metadata: SessionMetadata?) {
+        self.groupId = groupId
+        self.playbackState = playbackState
+        self.metadata = metadata
+    }
+}
+
+public struct SessionMetadata: Codable, Sendable {
+    public let title: String?
+    public let artist: String?
+    public let album: String?
+    public let albumArtist: String?
+    public let track: Int?
+    public let trackDuration: Int?  // Duration in seconds (Go sends int, not float64)
+    public let year: Int?
+    public let playbackSpeed: Double?
+    public let `repeat`: String?  // "off", "track", "all" (Go sends string, not bool)
+    public let shuffle: Bool?
+    public let artworkUrl: String?
+    public let timestamp: Int64?
+
+    public init(
+        title: String?,
+        artist: String?,
+        album: String?,
+        albumArtist: String?,
+        track: Int?,
+        trackDuration: Int?,
+        year: Int?,
+        playbackSpeed: Double?,
+        repeat: String?,
+        shuffle: Bool?,
+        artworkUrl: String?,
+        timestamp: Int64?
+    ) {
+        self.title = title
+        self.artist = artist
+        self.album = album
+        self.albumArtist = albumArtist
+        self.track = track
+        self.trackDuration = trackDuration
+        self.year = year
+        self.playbackSpeed = playbackSpeed
+        self.`repeat` = `repeat`
+        self.shuffle = shuffle
+        self.artworkUrl = artworkUrl
+        self.timestamp = timestamp
     }
 }
