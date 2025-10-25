@@ -4,10 +4,10 @@ import Foundation
 
 @Suite("Binary Message Tests")
 struct BinaryMessageTests {
-    @Test("Decode audio chunk binary message")
+    @Test("Decode audio chunk binary message with type 1")
     func testAudioChunkDecoding() throws {
         var data = Data()
-        data.append(0) // Type: audio chunk
+        data.append(1) // Type: audio chunk (server uses type 1)
 
         // Timestamp: 1234567890 microseconds (big-endian int64)
         let timestamp: Int64 = 1234567890

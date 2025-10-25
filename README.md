@@ -8,7 +8,7 @@ A Swift client library for the [Resonate Protocol](https://github.com/Resonate-P
 - 🎛️ **Controller Role**: Control playback across device groups
 - 📝 **Metadata Role**: Display track information and progress
 - 🔍 **Auto-discovery**: mDNS/Bonjour server discovery
-- 🎵 **Multi-codec**: FLAC, Opus, and PCM support
+- 🎵 **Multi-codec**: PCM support (Opus and FLAC planned)
 - ⏱️ **Clock Sync**: NTP-style time synchronization
 
 ## Requirements
@@ -39,8 +39,8 @@ let client = ResonateClient(
     playerConfig: PlayerConfiguration(
         bufferCapacity: 1_048_576, // 1MB
         supportedFormats: [
-            AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
-            AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44100, bitDepth: 16),
+            // IMPORTANT: Only advertise PCM until Opus/FLAC decoders are implemented
+            AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
         ]
     )
 )
@@ -77,7 +77,8 @@ The scheduler converts server timestamps to local playback times and ensures chu
 
 ## Testing
 
-See [docs/TESTING.md](docs/TESTING.md) for manual testing procedures and validation checklist.
+- **Swift Bring-Up Guide**: See [docs/SWIFT_BRINGUP.md](docs/SWIFT_BRINGUP.md) for codec negotiation, scheduler architecture, clock sync details, and the 5-minute PCM stream test procedure.
+- **Manual Testing**: See [docs/TESTING.md](docs/TESTING.md) for manual testing procedures and validation checklist.
 
 ## License
 

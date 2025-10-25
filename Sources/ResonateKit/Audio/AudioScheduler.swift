@@ -13,26 +13,36 @@ public struct SchedulerStats: Sendable {
     public let received: Int
     public let played: Int
     public let dropped: Int
+    public let droppedLate: Int  // Frames dropped because they were >50ms late
+    public let droppedOther: Int // Frames dropped due to queue overflow
 
-    public init(received: Int = 0, played: Int = 0, dropped: Int = 0) {
+    public init(received: Int = 0, played: Int = 0, dropped: Int = 0, droppedLate: Int = 0, droppedOther: Int = 0) {
         self.received = received
         self.played = played
         self.dropped = dropped
+        self.droppedLate = droppedLate
+        self.droppedOther = droppedOther
     }
 }
 
-/// Detailed statistics including queue size
+/// Detailed statistics including queue size and buffer metrics
 public struct DetailedSchedulerStats: Sendable {
     public let received: Int
     public let played: Int
     public let dropped: Int
+    public let droppedLate: Int
+    public let droppedOther: Int
     public let queueSize: Int
+    public let bufferFillMs: Double  // Current buffer fill in milliseconds
 
-    public init(received: Int = 0, played: Int = 0, dropped: Int = 0, queueSize: Int = 0) {
+    public init(received: Int = 0, played: Int = 0, dropped: Int = 0, droppedLate: Int = 0, droppedOther: Int = 0, queueSize: Int = 0, bufferFillMs: Double = 0.0) {
         self.received = received
         self.played = played
         self.dropped = dropped
+        self.droppedLate = droppedLate
+        self.droppedOther = droppedOther
         self.queueSize = queueSize
+        self.bufferFillMs = bufferFillMs
     }
 }
 
@@ -100,7 +110,9 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
             schedulerStats = SchedulerStats(
                 received: schedulerStats.received,
                 played: schedulerStats.played,
-                dropped: schedulerStats.dropped + 1
+                dropped: schedulerStats.dropped + 1,
+                droppedLate: schedulerStats.droppedLate,
+                droppedOther: schedulerStats.droppedOther + 1
             )
             print("[SCHEDULER] Queue overflow: dropped oldest chunk")
         }
@@ -111,7 +123,9 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
         schedulerStats = SchedulerStats(
             received: schedulerStats.received + 1,
             played: schedulerStats.played,
-            dropped: schedulerStats.dropped
+            dropped: schedulerStats.dropped,
+            droppedLate: schedulerStats.droppedLate,
+            droppedOther: schedulerStats.droppedOther
         )
     }
 
@@ -143,13 +157,25 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
         return schedulerStats
     }
 
-    /// Get detailed statistics including queue size
+    /// Get detailed statistics including queue size and buffer metrics
     public func getDetailedStats() -> DetailedSchedulerStats {
+        // Calculate buffer fill: time until next chunk should play
+        let now = Date()
+        let bufferFillMs: Double
+        if let nextChunk = queue.first {
+            bufferFillMs = max(0, nextChunk.playTime.timeIntervalSince(now) * 1000.0)
+        } else {
+            bufferFillMs = 0.0
+        }
+
         return DetailedSchedulerStats(
             received: schedulerStats.received,
             played: schedulerStats.played,
             dropped: schedulerStats.dropped,
-            queueSize: queue.count
+            droppedLate: schedulerStats.droppedLate,
+            droppedOther: schedulerStats.droppedOther,
+            queueSize: queue.count,
+            bufferFillMs: bufferFillMs
         )
     }
 
@@ -201,11 +227,13 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
                 schedulerStats = SchedulerStats(
                     received: schedulerStats.received,
                     played: schedulerStats.played,
-                    dropped: schedulerStats.dropped + 1
+                    dropped: schedulerStats.dropped + 1,
+                    droppedLate: schedulerStats.droppedLate + 1,
+                    droppedOther: schedulerStats.droppedOther
                 )
 
                 // Log first 10 drops
-                if schedulerStats.dropped <= 10 {
+                if schedulerStats.droppedLate <= 10 {
                     print("[SCHEDULER] Dropped late chunk: \(Int(-delay * 1000))ms late")
                 }
             } else {
@@ -216,7 +244,9 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
                 schedulerStats = SchedulerStats(
                     received: schedulerStats.received,
                     played: schedulerStats.played + 1,
-                    dropped: schedulerStats.dropped
+                    dropped: schedulerStats.dropped,
+                    droppedLate: schedulerStats.droppedLate,
+                    droppedOther: schedulerStats.droppedOther
                 )
             }
         }

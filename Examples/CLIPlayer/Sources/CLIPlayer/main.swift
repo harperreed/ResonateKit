@@ -21,13 +21,11 @@ final class CLIPlayer {
         }
 
         // Create player configuration
+        // IMPORTANT: Only advertise PCM until Opus/FLAC decoders are implemented
         let config = PlayerConfiguration(
             bufferCapacity: 2_097_152,  // 2MB buffer
             supportedFormats: [
                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 44100, bitDepth: 16),
-                AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
-                AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 48000, bitDepth: 24)
             ]
         )
 

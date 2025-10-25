@@ -377,16 +377,35 @@ public final class ResonateClient {
     }
 
     nonisolated private func logSchedulerStats() async {
-        while !Task.isCancelled {
-            // Wait 5 seconds between stats logs
-            try? await Task.sleep(for: .seconds(5))
+        var lastStats = DetailedSchedulerStats()
 
-            guard let audioScheduler = await audioScheduler else { continue }
-            let detailedStats = await audioScheduler.getDetailedStats()
+        while !Task.isCancelled {
+            // Wait 1 second between stats logs (as per telemetry requirements)
+            try? await Task.sleep(for: .seconds(1))
+
+            guard let audioScheduler = await audioScheduler,
+                  let clockSync = await clockSync else { continue }
+
+            let currentStats = await audioScheduler.getDetailedStats()
 
             // Only log if we've received chunks
-            if detailedStats.received > 0 {
-                print("[CLIENT] Scheduler stats: received=\(detailedStats.received), played=\(detailedStats.played), dropped=\(detailedStats.dropped), queue_size=\(detailedStats.queueSize)")
+            if currentStats.received > 0 {
+                // Calculate per-second deltas
+                let framesScheduled = currentStats.received - lastStats.received
+                let framesPlayed = currentStats.played - lastStats.played
+                let framesDroppedLate = currentStats.droppedLate - lastStats.droppedLate
+                let framesDroppedOther = currentStats.droppedOther - lastStats.droppedOther
+
+                // Get clock sync stats
+                let offset = await clockSync.statsOffset
+                let rtt = await clockSync.statsRtt
+                let clockOffsetMs = Double(offset) / 1000.0
+                let rttMs = Double(rtt) / 1000.0
+
+                // Telemetry format as per requirements
+                print("[TELEMETRY] framesScheduled=\(framesScheduled), framesPlayed=\(framesPlayed), framesDroppedLate=\(framesDroppedLate), framesDroppedOther=\(framesDroppedOther), bufferFillMs=\(String(format: "%.1f", currentStats.bufferFillMs)), clockOffsetMs=\(String(format: "%.2f", clockOffsetMs)), rttMs=\(String(format: "%.2f", rttMs)), queueSize=\(currentStats.queueSize)")
+
+                lastStats = currentStats
             }
         }
     }

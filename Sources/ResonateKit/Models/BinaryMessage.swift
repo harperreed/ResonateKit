@@ -7,8 +7,8 @@ import Foundation
 /// Bits 7-2: role type, Bits 1-0: message slot
 public enum BinaryMessageType: UInt8, Sendable {
     // Player role (000000xx)
-    case audioChunk = 0
-    case audioChunkAlt = 1  // Alternative audio chunk slot (observed in server)
+    case audioChunk = 1  // Server uses type 1 for audio chunks
+    case audioChunkAlt = 0  // Legacy slot (not used by server)
 
     // Artwork role (000001xx)
     case artworkChannel0 = 4
