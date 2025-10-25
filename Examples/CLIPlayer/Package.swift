@@ -21,6 +21,12 @@ let package = Package(
             dependencies: [
                 .product(name: "ResonateKit", package: "ResonateKit")
             ]
+        ),
+        .executableTarget(
+            name: "SimpleTest",
+            dependencies: [
+                .product(name: "ResonateKit", package: "ResonateKit")
+            ]
         )
     ]
 )

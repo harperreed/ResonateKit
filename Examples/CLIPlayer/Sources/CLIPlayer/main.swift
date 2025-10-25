@@ -5,11 +5,11 @@ import Foundation
 import ResonateKit
 
 /// Simple CLI player for Resonate Protocol
-@MainActor
 final class CLIPlayer {
     private var client: ResonateClient?
     private var eventTask: Task<Void, Never>?
 
+    @MainActor
     func run(serverURL: String, clientName: String) async throws {
         print("🎵 Resonate CLI Player")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -55,10 +55,14 @@ final class CLIPlayer {
         print("  q          - Quit")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
-        // Run command loop
-        await runCommandLoop(client: client)
+        // Run command loop on background thread to avoid blocking MainActor
+        let commandTask = Task.detached {
+            await CLIPlayer.runCommandLoopStatic(client: client)
+        }
+        await commandTask.value
     }
 
+    @MainActor
     private func monitorEvents(client: ResonateClient) async {
         for await event in client.events {
             switch event {
@@ -92,7 +96,7 @@ final class CLIPlayer {
         }
     }
 
-    private func runCommandLoop(client: ResonateClient) async {
+    nonisolated private static func runCommandLoopStatic(client: ResonateClient) async {
         print("> ", terminator: "")
         fflush(stdout)
 

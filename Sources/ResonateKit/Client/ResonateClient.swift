@@ -17,6 +17,7 @@ public final class ResonateClient {
     // State
     public private(set) var connectionState: ConnectionState = .disconnected
     private var playerSyncState: String = "synchronized"  // "synchronized" or "error"
+    private var isAutoStarting = false  // Prevent multiple simultaneous auto-starts
     private var currentVolume: Float = 1.0
     private var currentMuted: Bool = false
 
@@ -164,15 +165,18 @@ public final class ResonateClient {
     /// Does multiple sync rounds to establish offset and drift before audio starts
     @MainActor
     private func performInitialSync() async throws {
+        print("[CLIENT] performInitialSync ENTERED")
         guard let transport = transport, let clockSync = clockSync else {
+            print("[CLIENT] performInitialSync EXITING - missing transport or clockSync")
             throw ResonateClientError.notConnected
         }
 
         print("[CLIENT] Performing initial clock synchronization...")
 
         // Do 5 quick sync rounds to establish offset and drift
-        for _ in 0..<5 {
+        for i in 0..<5 {
             let now = getCurrentMicroseconds()
+            print("[CLIENT] performInitialSync round \(i+1): sending client/time with t1=\(now)")
 
             let payload = ClientTimePayload(clientTransmitted: now)
             let message = ClientTimeMessage(payload: payload)
@@ -191,6 +195,7 @@ public final class ResonateClient {
         let rtt = await clockSync.statsRtt
         let quality = await clockSync.statsQuality
         print("[CLIENT] Initial clock sync complete: offset=\(offset)μs, rtt=\(rtt)μs, quality=\(quality)")
+        print("[CLIENT] performInitialSync EXITED")
     }
 
     /// Disconnect from server
@@ -340,9 +345,14 @@ public final class ResonateClient {
     }
 
     nonisolated private func runClockSync() async {
-        guard let transport = await transport else { return }
+        print("[CLIENT] runClockSync ENTERED")
+        guard let transport = await transport else {
+            print("[CLIENT] runClockSync EXITING - no transport")
+            return
+        }
 
         while !Task.isCancelled {
+            print("[CLIENT] runClockSync loop iteration")
             // Send client/time every 5 seconds
             do {
                 let now = getCurrentMicroseconds()
@@ -353,12 +363,14 @@ public final class ResonateClient {
                 try await transport.send(message)
             } catch {
                 // Connection lost
+                print("[CLIENT] runClockSync connection lost: \(error)")
                 break
             }
 
             // Wait 5 seconds
             try? await Task.sleep(for: .seconds(5))
         }
+        print("[CLIENT] runClockSync EXITED")
     }
 
     nonisolated private func runSchedulerOutput() async {
@@ -426,33 +438,35 @@ public final class ResonateClient {
         // For now, try each message type
 
         if let message = try? decoder.decode(ServerHelloMessage.self, from: data) {
+            print("[CLIENT] ✓ Decoded ServerHello")
             await handleServerHello(message)
         } else if let message = try? decoder.decode(ServerTimeMessage.self, from: data) {
+            print("[CLIENT] ✓ Decoded ServerTime")
             await handleServerTime(message)
         } else if let message = try? decoder.decode(StreamStartMessage.self, from: data) {
+            print("[CLIENT] ✓ Decoded StreamStart")
             await handleStreamStart(message)
         } else if let message = try? decoder.decode(StreamEndMessage.self, from: data) {
+            print("[CLIENT] ✓ Decoded StreamEnd")
             await handleStreamEnd(message)
         } else if let message = try? decoder.decode(GroupUpdateMessage.self, from: data) {
+            print("[CLIENT] ✓ Decoded GroupUpdate")
             await handleGroupUpdate(message)
         } else {
-            print("[DEBUG] Failed to decode message: \(text)")
+            print("[CLIENT] ❌ Failed to decode message: \(text)")
         }
     }
 
     nonisolated private func handleBinaryMessage(_ data: Data) async {
-        print("[DEBUG] Received binary message: \(data.count) bytes")
-
         guard let message = BinaryMessage(data: data) else {
-            print("[DEBUG] Failed to parse binary message")
+            print("[CLIENT] ❌ Failed to parse binary message")
             return
         }
 
-        print("[DEBUG] Binary message type: \(message.type) timestamp: \(message.timestamp) data: \(message.data.count) bytes")
-
         switch message.type {
         case .audioChunk, .audioChunkAlt:
-            await handleAudioChunk(message)
+            // Call on MainActor - this will queue but maintain order
+            await handleAudioChunkNonisolated(message)
 
         case .artworkChannel0, .artworkChannel1, .artworkChannel2, .artworkChannel3:
             let channel = Int(message.type.rawValue - 4)
@@ -464,6 +478,7 @@ public final class ResonateClient {
     }
 
     private func handleServerHello(_ message: ServerHelloMessage) async {
+        print("[CLIENT] handleServerHello ENTERED")
         connectionState = .connected
 
         let info = ServerInfo(
@@ -478,16 +493,23 @@ public final class ResonateClient {
         try? await sendClientState()
 
         // Now that handshake is complete, start clock synchronization
+        print("[CLIENT] handleServerHello calling performInitialSync...")
         try? await performInitialSync()
 
         // Start continuous clock sync loop
+        print("[CLIENT] handleServerHello starting runClockSync task...")
         clockSyncTask = Task.detached { [weak self] in
             await self?.runClockSync()
         }
+        print("[CLIENT] handleServerHello EXITED")
     }
 
     private func handleServerTime(_ message: ServerTimeMessage) async {
-        guard let clockSync = clockSync else { return }
+        print("[CLIENT] handleServerTime ENTERED")
+        guard let clockSync = clockSync else {
+            print("[CLIENT] handleServerTime EXITING - no clockSync")
+            return
+        }
 
         let now = getCurrentMicroseconds()
 
@@ -497,14 +519,27 @@ public final class ResonateClient {
             serverTransmitted: message.payload.serverTransmitted,
             clientReceived: now
         )
+        print("[CLIENT] handleServerTime processed sync response")
     }
 
     private func handleStreamStart(_ message: StreamStartMessage) async {
-        guard let playerInfo = message.payload.player else { return }
-        guard let audioPlayer = audioPlayer else { return }
+        print("[CLIENT] 🎬 handleStreamStart called")
+
+        guard let playerInfo = message.payload.player else {
+            print("[CLIENT] ❌ No player info in stream/start payload")
+            return
+        }
+
+        print("[CLIENT] Stream format: \(playerInfo.codec) \(playerInfo.sampleRate)Hz \(playerInfo.channels)ch \(playerInfo.bitDepth)bit")
+
+        guard let audioPlayer = audioPlayer else {
+            print("[CLIENT] ❌ No audio player available")
+            return
+        }
 
         // Parse codec
         guard let codec = AudioCodec(rawValue: playerInfo.codec) else {
+            print("[CLIENT] ❌ Unsupported codec: \(playerInfo.codec)")
             connectionState = .error("Unsupported codec: \(playerInfo.codec)")
             playerSyncState = "error"
             try? await sendClientState()  // Notify server of error state
@@ -525,16 +560,20 @@ public final class ResonateClient {
         }
 
         do {
+            print("[CLIENT] 🎵 Starting audio player...")
             try await audioPlayer.start(format: format, codecHeader: codecHeader)
             playerSyncState = "synchronized"  // Successfully started
+            print("[CLIENT] ✅ Audio player started successfully")
 
             // Start scheduler
-            print("[CLIENT] Starting AudioScheduler")
+            print("[CLIENT] 📅 Starting AudioScheduler...")
             await audioScheduler?.startScheduling()
+            print("[CLIENT] ✅ AudioScheduler started")
 
             eventsContinuation.yield(.streamStarted(format))
             try? await sendClientState()  // Notify server of synchronized state
         } catch {
+            print("[CLIENT] ❌ Failed to start audio: \(error)")
             connectionState = .error("Failed to start audio: \(error.localizedDescription)")
             playerSyncState = "error"
             try? await sendClientState()  // Notify server of error state
@@ -566,9 +605,50 @@ public final class ResonateClient {
         }
     }
 
+    nonisolated private func handleAudioChunkNonisolated(_ message: BinaryMessage) async {
+        // This wrapper allows calling from nonisolated context
+        // It properly awaits the MainActor call to maintain ordering
+        await handleAudioChunk(message)
+    }
+
     private func handleAudioChunk(_ message: BinaryMessage) async {
         guard let audioPlayer = audioPlayer,
-              let audioScheduler = audioScheduler else { return }
+              let audioScheduler = audioScheduler else {
+            print("[CLIENT] ⚠️ Received audio chunk but player not started (missing stream/start?)")
+            return
+        }
+
+        // Auto-start player if not already started (some servers don't send stream/start)
+        // Use flag to prevent multiple simultaneous auto-starts
+        let isPlaying = await audioPlayer.isPlaying
+        if !isPlaying && !isAutoStarting {
+            isAutoStarting = true
+            print("[CLIENT] 🎵 Auto-starting player with default format (PCM 48kHz 2ch 16bit)")
+            do {
+                let defaultFormat = AudioFormatSpec(
+                    codec: .pcm,
+                    channels: 2,
+                    sampleRate: 48000,
+                    bitDepth: 16
+                )
+                try await audioPlayer.start(format: defaultFormat, codecHeader: nil)
+                playerSyncState = "synchronized"
+
+                print("[CLIENT] 📅 Starting AudioScheduler...")
+                await audioScheduler.startScheduling()
+                print("[CLIENT] ✅ Player auto-started successfully")
+
+                eventsContinuation.yield(.streamStarted(defaultFormat))
+                try? await sendClientState()
+            } catch {
+                print("[CLIENT] ❌ Failed to auto-start player: \(error)")
+                isAutoStarting = false  // Reset flag on failure
+                return
+            }
+        } else if !isPlaying && isAutoStarting {
+            // Another chunk is already auto-starting, drop this chunk
+            return
+        }
 
         do {
             // Decode chunk within AudioPlayer actor
@@ -577,16 +657,18 @@ public final class ResonateClient {
             // Schedule for playback instead of immediate enqueue
             await audioScheduler.schedule(pcm: pcmData, serverTimestamp: message.timestamp)
         } catch {
-            print("[DEBUG] Failed to decode/schedule chunk: \(error)")
+            print("[CLIENT] ❌ Failed to decode/schedule chunk: \(error)")
         }
     }
 
-    nonisolated private func getCurrentMicroseconds() -> Int64 {
-        var info = mach_timebase_info()
-        mach_timebase_info(&info)
+    // Process start time for relative clock (nonisolated for use in getCurrentMicroseconds)
+    nonisolated private static let processStartTime = Date()
 
-        let nanos = mach_absolute_time() * UInt64(info.numer) / UInt64(info.denom)
-        return Int64(nanos / 1000)
+    nonisolated private func getCurrentMicroseconds() -> Int64 {
+        // Use monotonic time relative to process start (like Go client)
+        // This matches the server's clock domain (time.Since(serverStart))
+        let elapsed = Date().timeIntervalSince(ResonateClient.processStartTime)
+        return Int64(elapsed * 1_000_000)
     }
 
     /// Set playback volume (0.0 to 1.0)

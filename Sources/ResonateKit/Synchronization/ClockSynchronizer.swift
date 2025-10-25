@@ -23,7 +23,15 @@ public actor ClockSynchronizer: ClockSyncProtocol {
     private var sampleCount: Int = 0
     private let smoothingRate: Double = 0.1 // 10% weight to new samples (Kalman gain)
 
-    public init() {}
+    // Server loop origin tracking (when server's loop.time() == 0 in client's time domain)
+    // This anchors the process-relative time domain to absolute time
+    private let clientProcessStartAbsolute: Int64  // Absolute Unix epoch μs when client process started
+    private var serverLoopOriginAbsolute: Int64 = 0  // Absolute Unix epoch μs when server loop started
+
+    public init() {
+        // Record absolute time when synchronizer is created (proxy for process start)
+        self.clientProcessStartAbsolute = Int64(Date().timeIntervalSince1970 * 1_000_000)
+    }
 
     /// Current clock offset in microseconds
     public var currentOffset: Int64 {
@@ -87,9 +95,16 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         if sampleCount == 0 {
             offset = measuredOffset
             lastSyncMicros = clientReceived
+
+            // Calculate server loop origin: when server loop.time() was 0
+            // Since offset = server - client, when server = 0: client = -offset
+            // Server loop origin in absolute time = client_process_start + (-offset)
+            serverLoopOriginAbsolute = clientProcessStartAbsolute - offset
+
             sampleCount += 1
             quality = .good
             print("[SYNC] Initial sync: offset=\(offset)μs, rtt=\(calculatedRtt)μs")
+            print("[SYNC] Server loop origin: \(serverLoopOriginAbsolute)μs absolute (client process start: \(clientProcessStartAbsolute)μs)")
             return
         }
 
@@ -103,6 +118,10 @@ public actor ClockSynchronizer: ClockSyncProtocol {
             }
             offset = measuredOffset
             lastSyncMicros = clientReceived
+
+            // Update server loop origin with new offset
+            serverLoopOriginAbsolute = clientProcessStartAbsolute - offset
+
             sampleCount += 1
             quality = .good
             print("[SYNC] Second sync: offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), rtt=\(calculatedRtt)μs")
@@ -140,6 +159,9 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         lastSyncMicros = clientReceived
         sampleCount += 1
 
+        // Update server loop origin with refined offset (accounting for drift)
+        serverLoopOriginAbsolute = clientProcessStartAbsolute - offset
+
         // Update quality based on RTT
         if calculatedRtt < 50_000 { // <50ms
             quality = .good
@@ -166,46 +188,38 @@ public actor ClockSynchronizer: ClockSyncProtocol {
     }
 
     /// Convert server timestamp to local time
-    /// Accounts for both offset and drift over time
+    /// Server timestamps are in server's loop.time() domain (microseconds since server started)
+    /// Returns absolute Unix epoch time in microseconds (suitable for Date conversion)
     public func serverTimeToLocal(_ serverTime: Int64) -> Int64 {
-        // If we haven't synced yet, assume server time = client time
+        // If we haven't synced yet, estimate using current process time
+        // Assume server and client started at roughly the same time
         if sampleCount == 0 {
-            return serverTime
+            return clientProcessStartAbsolute + serverTime
         }
 
-        // Inverse of the forward transform:
-        // server_time = client_time + offset + drift * (client_time - last_sync)
-        // Rearranging: server_time = client_time * (1 + drift) + offset - drift * last_sync
-        // Solving: client_time = (server_time - offset + drift * last_sync) / (1 + drift)
-
-        let denominator = 1.0 + drift
-
-        // Guard against division by zero (would require drift = -1.0, extremely unlikely)
-        guard abs(denominator) > 1e-10 else {
-            // Fallback to simple offset if drift is pathological
-            print("[SYNC] WARNING: Pathological drift detected (\(drift)), using simple offset")
-            return serverTime - offset
-        }
-
-        let numerator = Double(serverTime) - Double(offset) + drift * Double(lastSyncMicros)
-        let clientMicros = Int64(numerator / denominator)
-
-        return clientMicros
+        // Simple conversion using server loop origin
+        // Server loop origin is the absolute time when server's loop.time() was 0
+        // Due to how we calculate it (clientProcessStartAbsolute - offset), and offset
+        // is continuously updated with drift compensation, the origin already accounts
+        // for drift implicitly.
+        //
+        // Therefore: absolute_time = server_loop_origin + server_time
+        return serverLoopOriginAbsolute + serverTime
     }
 
     /// Convert local timestamp to server time
-    /// Accounts for both offset and drift over time
+    /// Takes absolute Unix epoch time in microseconds (from Date)
+    /// Returns server loop.time() in microseconds (time since server started)
     public func localTimeToServer(_ localTime: Int64) -> Int64 {
-        // If we haven't synced yet, assume client time = server time
+        // If we haven't synced yet, estimate by subtracting process start
         if sampleCount == 0 {
-            return localTime
+            return localTime - clientProcessStartAbsolute
         }
 
-        // Apply offset and drift: server_time = client_time + offset + drift * (client_time - last_sync)
-        let dt = localTime - lastSyncMicros
-        let serverTime = localTime + offset + Int64(drift * Double(dt))
-
-        return serverTime
+        // Inverse of serverTimeToLocal:
+        // serverTimeToLocal: absolute_time = serverLoopOriginAbsolute + server_time
+        // Therefore: server_time = absolute_time - serverLoopOriginAbsolute
+        return localTime - serverLoopOriginAbsolute
     }
 
     /// Check and update quality based on time since last sync
@@ -225,6 +239,7 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         quality = .lost
         lastSyncTime = nil
         lastSyncMicros = 0
+        serverLoopOriginAbsolute = 0
         sampleCount = 0
         print("[SYNC] Clock synchronization reset")
     }

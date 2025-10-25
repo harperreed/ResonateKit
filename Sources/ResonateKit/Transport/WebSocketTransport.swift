@@ -17,7 +17,8 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
     }
 
     func didReceive(event: WebSocketEvent, client: any WebSocketClient) {
-        print("[STARSCREAM] didReceive called with event: \(event)")
+        // Verbose logging disabled for production - uncomment for debugging
+        // print("[STARSCREAM] didReceive called with event: \(event)")
         switch event {
         case .connected(let headers):
             print("[STARSCREAM] WebSocket connected with headers: \(headers)")
@@ -35,18 +36,20 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
             binaryContinuation.finish()
 
         case .text(let string):
-            print("[STARSCREAM] Received text message: \(string.prefix(100))...")
+            // High-frequency event - logging disabled
             textContinuation.yield(string)
 
         case .binary(let data):
-            print("[STARSCREAM] Received binary message: \(data.count) bytes")
+            // High-frequency event - logging disabled
             binaryContinuation.yield(data)
 
         case .ping(_):
-            print("[STARSCREAM] Received ping")
+            // High-frequency event - logging disabled
+            break
 
         case .pong(_):
-            print("[STARSCREAM] Received pong")
+            // High-frequency event - logging disabled
+            break
 
         case .viabilityChanged(let isViable):
             print("[STARSCREAM] Viability changed: \(isViable)")
