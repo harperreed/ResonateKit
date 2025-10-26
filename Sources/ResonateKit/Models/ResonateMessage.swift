@@ -122,7 +122,7 @@ public struct MetadataSupport: Codable, Sendable {
 }
 
 public struct ArtworkSupport: Codable, Sendable {
-    // TODO: Implement when artwork role is added
+    // IMPLEMENTATION_NOTE: Implement when artwork role is added
 
     public init() {}
 
@@ -132,7 +132,7 @@ public struct ArtworkSupport: Codable, Sendable {
 }
 
 public struct VisualizerSupport: Codable, Sendable {
-    // TODO: Implement when visualizer role is added
+    // IMPLEMENTATION_NOTE: Implement when visualizer role is added
 
     public init() {}
 
@@ -239,11 +239,26 @@ public struct PlayerUpdatePayload: Codable, Sendable {
 }
 
 // Legacy type aliases for backward compatibility
-@available(*, deprecated, renamed: "PlayerUpdateMessage", message: "Use PlayerUpdateMessage instead to match protocol spec")
+@available(
+    *,
+    deprecated,
+    renamed: "PlayerUpdateMessage",
+    message: "Use PlayerUpdateMessage instead to match protocol spec"
+)
 public typealias ClientStateMessage = PlayerUpdateMessage
-@available(*, deprecated, renamed: "PlayerUpdatePayload", message: "Use PlayerUpdatePayload instead to match protocol spec")
+@available(
+    *,
+    deprecated,
+    renamed: "PlayerUpdatePayload",
+    message: "Use PlayerUpdatePayload instead to match protocol spec"
+)
 public typealias ClientStatePayload = PlayerUpdatePayload
-@available(*, deprecated, renamed: "PlayerUpdatePayload", message: "Use PlayerUpdatePayload instead to match protocol spec")
+@available(
+    *,
+    deprecated,
+    renamed: "PlayerUpdatePayload",
+    message: "Use PlayerUpdatePayload instead to match protocol spec"
+)
 public typealias PlayerState = PlayerUpdatePayload
 
 // MARK: - Stream Messages
@@ -287,7 +302,7 @@ public struct StreamStartPlayer: Codable, Sendable {
 }
 
 public struct StreamStartArtwork: Codable, Sendable {
-    // TODO: Implement when artwork role is added
+    // IMPLEMENTATION_NOTE: Implement when artwork role is added
 
     public init() {}
 
@@ -297,7 +312,7 @@ public struct StreamStartArtwork: Codable, Sendable {
 }
 
 public struct StreamStartVisualizer: Codable, Sendable {
-    // TODO: Implement when visualizer role is added
+    // IMPLEMENTATION_NOTE: Implement when visualizer role is added
 
     public init() {}
 

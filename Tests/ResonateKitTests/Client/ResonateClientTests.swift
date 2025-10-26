@@ -10,7 +10,7 @@ struct ResonateClientTests {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
             ]
         )
 
@@ -30,7 +30,7 @@ struct ResonateClientTests {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
             ]
         )
 
@@ -52,7 +52,7 @@ struct ResonateClientTests {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
             ]
         )
 
@@ -77,7 +77,7 @@ struct ResonateClientTests {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
             ]
         )
 

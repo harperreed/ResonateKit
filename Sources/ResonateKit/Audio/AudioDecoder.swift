@@ -31,7 +31,7 @@ public enum AudioDecoderFactory {
         case .pcm:
             return PCMDecoder()
         case .opus, .flac:
-            // TODO: Implement using AVAudioConverter or AudioToolbox
+            // IMPLEMENTATION_NOTE: Implement using AVAudioConverter or AudioToolbox
             fatalError("Opus/FLAC decoding not yet implemented")
         }
     }

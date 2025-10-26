@@ -10,6 +10,13 @@ public enum SyncQuality: Sendable {
     case lost
 }
 
+/// Clock synchronization statistics
+public struct ClockStats: Sendable {
+    public let offset: Int64
+    public let rtt: Int64
+    public let quality: SyncQuality
+}
+
 /// Synchronizes local clock with server clock using drift compensation
 public actor ClockSynchronizer: ClockSyncProtocol {
     // Clock synchronization state
@@ -44,9 +51,8 @@ public actor ClockSynchronizer: ClockSyncProtocol {
     }
 
     /// Get sync statistics
-    public func getStats() -> (offset: Int64, rtt: Int64, quality: SyncQuality) {
-        // Return tuple with named components for clarity
-        return (offset: offset, rtt: rtt, quality: quality)
+    public func getStats() -> ClockStats {
+        return ClockStats(offset: offset, rtt: rtt, quality: quality)
     }
 
     /// Get individual stats for Sendable contexts
@@ -63,10 +69,10 @@ public actor ClockSynchronizer: ClockSyncProtocol {
     ) {
         // Calculate RTT and measured offset
         let (calculatedRtt, measuredOffset) = calculateOffset(
-            t1: clientTransmitted,
-            t2: serverReceived,
-            t3: serverTransmitted,
-            t4: clientReceived
+            clientTx: clientTransmitted,
+            serverRx: serverReceived,
+            serverTx: serverTransmitted,
+            clientRx: clientReceived
         )
 
         rtt = calculatedRtt
@@ -75,8 +81,9 @@ public actor ClockSynchronizer: ClockSyncProtocol {
 
         // Debug logging for first few syncs
         if sampleCount < 3 {
-            // print("[SYNC] Raw timestamps: t1=\(clientTransmitted), t2=\(serverReceived), t3=\(serverTransmitted), t4=\(clientReceived)")
-            // print("[SYNC] Calculated: rtt=\(calculatedRtt)μs, measured_offset=\(measuredOffset)μs")
+            // Raw timestamps: t1=\(clientTransmitted), t2=\(serverReceived),
+            // t3=\(serverTransmitted), t4=\(clientReceived)
+            // Calculated: rtt=\(calculatedRtt)μs, measured_offset=\(measuredOffset)μs
         }
 
         // Discard samples with negative RTT (timestamp issues)
@@ -103,18 +110,20 @@ public actor ClockSynchronizer: ClockSyncProtocol {
 
             sampleCount += 1
             quality = .good
-            // print("[SYNC] Initial sync: offset=\(offset)μs, rtt=\(calculatedRtt)μs")
-            // print("[SYNC] Server loop origin: \(serverLoopOriginAbsolute)μs absolute (client process start: \(clientProcessStartAbsolute)μs)")
+            // Initial sync: offset=\(offset)μs, rtt=\(calculatedRtt)μs
+            // Server loop origin: \(serverLoopOriginAbsolute)μs absolute
+            // client process start: \(clientProcessStartAbsolute)μs
             return
         }
 
         // Second sync: calculate initial drift
         if sampleCount == 1 {
-            let dt = Double(clientReceived - lastSyncMicros)
-            if dt > 0 {
+            let deltaTime = Double(clientReceived - lastSyncMicros)
+            if deltaTime > 0 {
                 // Drift = change in offset over time
-                drift = Double(measuredOffset - offset) / dt
-                // print("[SYNC] Drift initialized: drift=\(String(format: "%.9f", drift)) μs/μs over Δt=\(Int(dt))μs")
+                drift = Double(measuredOffset - offset) / deltaTime
+                // Drift initialized: drift=\(String(format: "%.9f", drift)) μs/μs
+                // over Δt=\(Int(deltaTime))μs
             }
             offset = measuredOffset
             lastSyncMicros = clientReceived
@@ -124,26 +133,27 @@ public actor ClockSynchronizer: ClockSyncProtocol {
 
             sampleCount += 1
             quality = .good
-            // print("[SYNC] Second sync: offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), rtt=\(calculatedRtt)μs")
+            // Second sync: offset=\(offset)μs, drift=\(String(format: "%.9f", drift)),
+            // rtt=\(calculatedRtt)μs
             return
         }
 
         // Subsequent syncs: predict offset using drift, then update both
-        let dt = Double(clientReceived - lastSyncMicros)
-        if dt <= 0 {
-            // print("[SYNC] Discarding sync sample: non-monotonic time")
+        let deltaTime = Double(clientReceived - lastSyncMicros)
+        if deltaTime <= 0 {
+            // Discarding sync sample: non-monotonic time
             return
         }
 
         // Predict what offset should be based on drift
-        let predictedOffset = offset + Int64(drift * dt)
+        let predictedOffset = offset + Int64(drift * deltaTime)
 
         // Residual = how much our prediction was off
         let residual = measuredOffset - predictedOffset
 
         // Reject outliers (residual > 50ms suggests network issue or clock jump)
         if abs(residual) > 50000 {
-            // print("[SYNC] Discarding sync sample: large residual \(residual)μs (possible clock jump)")
+            // Discarding sync sample: large residual \(residual)μs (possible clock jump)
             return
         }
 
@@ -151,10 +161,10 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         // This is the Kalman filter update formula (simplified with fixed gain)
         offset = predictedOffset + Int64(smoothingRate * Double(residual))
 
-        // Update drift: drift correction is residual / dt
+        // Update drift: drift correction is residual / deltaTime
         // This estimates how much the drift rate needs to change
-        let driftCorrection = Double(residual) / dt
-        drift = drift + smoothingRate * driftCorrection
+        let driftCorrection = Double(residual) / deltaTime
+        drift += smoothingRate * driftCorrection
 
         lastSyncMicros = clientReceived
         sampleCount += 1
@@ -170,19 +180,25 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         }
 
         if sampleCount < 10 {
-            // print("[SYNC] Sync #\(sampleCount): offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), residual=\(residual)μs, rtt=\(calculatedRtt)μs")
+            // Sync #\(sampleCount): offset=\(offset)μs, drift=\(String(format: "%.9f", drift)),
+            // residual=\(residual)μs, rtt=\(calculatedRtt)μs
         }
     }
 
     /// Calculate RTT and clock offset from timestamps
-    private func calculateOffset(t1: Int64, t2: Int64, t3: Int64, t4: Int64) -> (rtt: Int64, offset: Int64) {
+    private func calculateOffset(
+        clientTx: Int64,
+        serverRx: Int64,
+        serverTx: Int64,
+        clientRx: Int64
+    ) -> (rtt: Int64, offset: Int64) {
         // Round-trip time
         // RTT = (receive_time - send_time) - (server_transmit - server_receive)
-        let rtt = (t4 - t1) - (t3 - t2)
+        let rtt = (clientRx - clientTx) - (serverTx - serverRx)
 
         // Estimated offset (positive = server ahead of client)
         // offset = ((server_receive - client_transmit) + (server_transmit - client_receive)) / 2
-        let offset = ((t2 - t1) + (t3 - t4)) / 2
+        let offset = ((serverRx - clientTx) + (serverTx - clientRx)) / 2
 
         return (rtt, offset)
     }

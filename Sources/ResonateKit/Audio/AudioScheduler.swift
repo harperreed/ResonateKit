@@ -35,7 +35,15 @@ public struct DetailedSchedulerStats: Sendable {
     public let queueSize: Int
     public let bufferFillMs: Double // Current buffer fill in milliseconds
 
-    public init(received: Int = 0, played: Int = 0, dropped: Int = 0, droppedLate: Int = 0, droppedOther: Int = 0, queueSize: Int = 0, bufferFillMs: Double = 0.0) {
+    public init(
+        received: Int = 0,
+        played: Int = 0,
+        dropped: Int = 0,
+        droppedLate: Int = 0,
+        droppedOther: Int = 0,
+        queueSize: Int = 0,
+        bufferFillMs: Double = 0.0
+    ) {
         self.received = received
         self.played = played
         self.dropped = dropped
@@ -95,7 +103,8 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
             let delay = playTime.timeIntervalSince(now)
             let delayMs = Int(delay * 1000)
 
-            // print("[SCHEDULER] Chunk #\(receivedCount): server_ts=\(serverTimestamp)μs, delay=\(delayMs)ms, queue_size=\(queue.count)")
+            // Chunk #\(receivedCount): server_ts=\(serverTimestamp)μs,
+            // delay=\(delayMs)ms, queue_size=\(queue.count)
         }
 
         let chunk = ScheduledChunk(

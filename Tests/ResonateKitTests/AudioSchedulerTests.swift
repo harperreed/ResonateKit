@@ -112,10 +112,10 @@ final class AudioSchedulerTests: XCTestCase {
         let futureMicros = Int64(future.timeIntervalSince1970 * 1_000_000)
 
         // Schedule 10 chunks (exceeds limit of 5)
-        for i in 0 ..< 10 {
+        for chunkIndex in 0 ..< 10 {
             await scheduler.schedule(
-                pcm: Data([UInt8(i)]),
-                serverTimestamp: futureMicros + Int64(i * 1000)
+                pcm: Data([UInt8(chunkIndex)]),
+                serverTimestamp: futureMicros + Int64(chunkIndex * 1000)
             )
         }
 

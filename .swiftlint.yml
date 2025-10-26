@@ -1,0 +1,53 @@
+# SwiftLint Configuration for ResonateKit
+
+# Disabled rules
+disabled_rules:
+  - todo # We use IMPLEMENTATION_NOTE instead, but allow legacy TODOs temporarily
+
+# Opt-in rules
+opt_in_rules:
+  - trailing_comma
+
+# File and function length - adjusted for protocol implementation needs
+file_length:
+  warning: 600
+  error: 800
+
+function_body_length:
+  warning: 60
+  error: 100
+
+type_body_length:
+  warning: 400
+  error: 600
+
+# Cyclomatic complexity - adjusted for real-world protocol handling
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+# Line length
+line_length:
+  warning: 120
+  error: 150
+  ignores_comments: true
+  ignores_urls: true
+
+# Identifier names
+identifier_name:
+  min_length:
+    warning: 3
+    error: 2
+  excluded:
+    - id
+    - to
+    - db
+
+# Trailing commas - never allow them (matches SwiftFormat config)
+trailing_comma:
+  mandatory_comma: false
+
+# Large tuple
+large_tuple:
+  warning: 3
+  error: 4

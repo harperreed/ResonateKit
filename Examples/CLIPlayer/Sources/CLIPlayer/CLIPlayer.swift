@@ -94,7 +94,8 @@ final class CLIPlayer {
                 }
 
             case let .streamStarted(format):
-                let formatStr = "\(format.codec.rawValue) \(format.sampleRate)Hz \(format.channels)ch \(format.bitDepth)bit"
+                let formatStr = "\(format.codec.rawValue) \(format.sampleRate)Hz " +
+                    "\(format.channels)ch \(format.bitDepth)bit"
                 if useTUI {
                     await display.updateStream(format: formatStr)
                 } else {
@@ -396,23 +397,23 @@ actor StatusDisplay {
         }
     }
 
-    private func formatMicroseconds(_ us: Int64) -> String {
-        let abs_us = abs(us)
+    private func formatMicroseconds(_ microseconds: Int64) -> String {
+        let absMicroseconds = abs(microseconds)
 
-        if abs_us < 1000 {
-            return "\(us)μs"
-        } else if abs_us < 1_000_000 {
-            let ms = Double(us) / 1000.0
-            return String(format: "%.1fms", ms)
+        if absMicroseconds < 1000 {
+            return "\(microseconds)μs"
+        } else if absMicroseconds < 1_000_000 {
+            let milliseconds = Double(microseconds) / 1000.0
+            return String(format: "%.1fms", milliseconds)
         } else {
-            let s = Double(us) / 1_000_000.0
-            return String(format: "%.2fs", s)
+            let seconds = Double(microseconds) / 1_000_000.0
+            return String(format: "%.2fs", seconds)
         }
     }
 
-    private func formatBuffer(_ ms: Double) -> String {
-        let color = ms < 50 ? ANSI.red : (ms < 100 ? ANSI.yellow : ANSI.green)
-        return "\(color)\(String(format: "%.1fms", ms))\(ANSI.reset)"
+    private func formatBuffer(_ milliseconds: Double) -> String {
+        let color = milliseconds < 50 ? ANSI.red : (milliseconds < 100 ? ANSI.yellow : ANSI.green)
+        return "\(color)\(String(format: "%.1fms", milliseconds))\(ANSI.reset)"
     }
 
     private func makeVolumeBar(volume: Int, muted: Bool) -> String {

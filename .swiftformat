@@ -1,0 +1,3 @@
+# SwiftFormat Configuration
+# Disable trailing commas to comply with SwiftLint
+--trailingcommas never

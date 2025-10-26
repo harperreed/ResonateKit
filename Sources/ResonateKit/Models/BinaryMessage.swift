@@ -60,6 +60,7 @@ public struct BinaryMessage: Sendable {
         timestamp = extractedTimestamp
         self.data = data.subdata(in: 9 ..< data.count)
 
-        // print("[BinaryMessage] Successfully parsed: type=\(type) timestamp=\(extractedTimestamp) payloadSize=\(self.data.count)")
+        // Successfully parsed: type=\(type) timestamp=\(extractedTimestamp)
+        // payloadSize=\(self.data.count)
     }
 }

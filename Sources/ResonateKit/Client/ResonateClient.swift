@@ -88,10 +88,8 @@ public final class ResonateClient {
             }
 
             // Wait for all tasks and collect results
-            for await result in group {
-                if !result.isEmpty {
-                    latestServers = result
-                }
+            for await result in group where !result.isEmpty {
+                latestServers = result
             }
 
             return latestServers
@@ -174,9 +172,9 @@ public final class ResonateClient {
         // print("[CLIENT] Performing initial clock synchronization...")
 
         // Do 5 quick sync rounds to establish offset and drift
-        for i in 0 ..< 5 {
+        for syncRound in 0 ..< 5 {
             let now = getCurrentMicroseconds()
-            // print("[CLIENT] performInitialSync round \(i+1): sending client/time with t1=\(now)")
+            // performInitialSync round \(syncRound+1): sending client/time with t1=\(now)
 
             let payload = ClientTimePayload(clientTransmitted: now)
             let message = ClientTimeMessage(payload: payload)
@@ -417,7 +415,11 @@ public final class ResonateClient {
                 let rttMs = Double(rtt) / 1000.0
 
                 // Telemetry format as per requirements
-                // print("[TELEMETRY] framesScheduled=\(framesScheduled), framesPlayed=\(framesPlayed), framesDroppedLate=\(framesDroppedLate), framesDroppedOther=\(framesDroppedOther), bufferFillMs=\(String(format: "%.1f", currentStats.bufferFillMs)), clockOffsetMs=\(String(format: "%.2f", clockOffsetMs)), rttMs=\(String(format: "%.2f", rttMs)), queueSize=\(currentStats.queueSize)")
+                // framesScheduled=\(framesScheduled), framesPlayed=\(framesPlayed),
+                // framesDroppedLate=\(framesDroppedLate), framesDroppedOther=\(framesDroppedOther),
+                // bufferFillMs=\(String(format: "%.1f", currentStats.bufferFillMs)),
+                // clockOffsetMs=\(String(format: "%.2f", clockOffsetMs)),
+                // rttMs=\(String(format: "%.2f", rttMs)), queueSize=\(currentStats.queueSize)
 
                 lastStats = currentStats
             }
@@ -435,8 +437,7 @@ public final class ResonateClient {
         // Extract message type for logging
         var msgType = "unknown"
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let type = json["type"] as? String
-        {
+            let type = json["type"] as? String {
             msgType = type
             fputs("[RX] \(msgType)\n", stderr)
         }
@@ -543,7 +544,8 @@ public final class ResonateClient {
             return
         }
 
-        // print("[CLIENT] Stream format: \(playerInfo.codec) \(playerInfo.sampleRate)Hz \(playerInfo.channels)ch \(playerInfo.bitDepth)bit")
+        // Stream format: \(playerInfo.codec) \(playerInfo.sampleRate)Hz
+        // \(playerInfo.channels)ch \(playerInfo.bitDepth)bit
 
         guard let audioPlayer = audioPlayer else {
             // print("[CLIENT] ❌ No audio player available")
@@ -607,8 +609,7 @@ public final class ResonateClient {
 
     private func handleGroupUpdate(_ message: GroupUpdateMessage) async {
         if let groupId = message.payload.groupId,
-           let groupName = message.payload.groupName
-        {
+            let groupName = message.payload.groupName {
             let info = GroupInfo(
                 groupId: groupId,
                 groupName: groupName,

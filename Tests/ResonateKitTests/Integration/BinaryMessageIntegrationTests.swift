@@ -20,8 +20,8 @@ struct BinaryMessageIntegrationTests {
 
         // Generate simple sine wave test tone (440 Hz A note)
         var audioData = Data()
-        for i in 0 ..< sampleCount {
-            let time = Double(i) / Double(sampleRate)
+        for sampleIndex in 0 ..< sampleCount {
+            let time = Double(sampleIndex) / Double(sampleRate)
             let amplitude = sin(2.0 * .pi * 440.0 * time)
             let sample = Int16(amplitude * Double(Int16.max))
 
@@ -53,15 +53,15 @@ struct BinaryMessageIntegrationTests {
         var chunks: [BinaryMessage] = []
 
         // Create 10 sequential chunks
-        for i in 0 ..< 10 {
+        for chunkIndex in 0 ..< 10 {
             var data = Data()
             data.append(0) // Audio chunk type
 
-            let timestamp = Int64(i) * chunkDuration
+            let timestamp = Int64(chunkIndex) * chunkDuration
             withUnsafeBytes(of: timestamp.bigEndian) { data.append(contentsOf: $0) }
 
             // Add some dummy audio data
-            let audioData = Data(repeating: UInt8(i), count: 2048)
+            let audioData = Data(repeating: UInt8(chunkIndex), count: 2048)
             data.append(audioData)
 
             let message = try #require(BinaryMessage(data: data))
@@ -188,9 +188,9 @@ struct BinaryMessageIntegrationTests {
         let binCount = 32
         var fftData = Data()
 
-        for i in 0 ..< binCount {
+        for binIndex in 0 ..< binCount {
             // Simulate decreasing amplitude at higher frequencies
-            let amplitude = Float(255 - (i * 8))
+            let amplitude = Float(255 - (binIndex * 8))
             withUnsafeBytes(of: amplitude) { fftData.append(contentsOf: $0) }
         }
 

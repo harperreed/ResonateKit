@@ -28,7 +28,10 @@ public actor ServerDiscovery {
         let parameters = NWParameters()
         parameters.includePeerToPeer = true
 
-        let browser = NWBrowser(for: .bonjourWithTXTRecord(type: "_resonate-server._tcp", domain: nil), using: parameters)
+        let browser = NWBrowser(
+            for: .bonjourWithTXTRecord(type: "_resonate-server._tcp", domain: nil),
+            using: parameters
+        )
         self.browser = browser
 
         // Handle state changes

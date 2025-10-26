@@ -12,9 +12,9 @@ var serverURL: String?
 var clientName = "CLI Player"
 var enableTUI = true
 
-var i = 1
-while i < args.count {
-    let arg = args[i]
+var argIndex = 1
+while argIndex < args.count {
+    let arg = args[argIndex]
 
     if arg == "--no-tui" {
         enableTUI = false
@@ -23,7 +23,7 @@ while i < args.count {
     } else if !arg.starts(with: "--") {
         clientName = arg
     }
-    i += 1
+    argIndex += 1
 }
 
 // Discover or use provided server URL

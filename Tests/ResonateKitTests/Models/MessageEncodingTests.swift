@@ -14,7 +14,7 @@ struct MessageEncodingTests {
             supportedRoles: [.player],
             playerSupport: PlayerSupport(
                 supportFormats: [
-                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
                 ],
                 bufferCapacity: 1024,
                 supportedCommands: [.volume, .mute]
