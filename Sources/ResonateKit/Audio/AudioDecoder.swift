@@ -4,6 +4,7 @@
 @preconcurrency import AVFoundation
 import Foundation
 import Opus
+import FLAC
 
 /// Audio decoder protocol
 public protocol AudioDecoder {
@@ -137,80 +138,153 @@ public class OpusDecoder: AudioDecoder {
     }
 }
 
-/// FLAC decoder using AVAudioConverter
+/// FLAC decoder using libFLAC via flac-binary-xcframework
 public class FLACDecoder: AudioDecoder {
-    private let converter: AVAudioConverter
-    private let inputFormat: AVAudioFormat
-    private let outputFormat: AVAudioFormat
+    private var decoder: UnsafeMutablePointer<FLAC__StreamDecoder>?
+    private let sampleRate: Int
+    private let channels: Int
+    private let bitDepth: Int
+    private var pendingData: Data = Data()
+    private var decodedSamples: [Int32] = []
+    private var readOffset: Int = 0
 
     public init(sampleRate: Int, channels: Int, bitDepth: Int) throws {
-        // Input format: FLAC compressed audio
-        guard let flacFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,  // FLAC can be 16/24 bit
-            sampleRate: Double(sampleRate),
-            channels: AVAudioChannelCount(channels),
-            interleaved: true
-        ) else {
-            throw AudioDecoderError.formatCreationFailed("FLAC input format")
-        }
+        self.sampleRate = sampleRate
+        self.channels = channels
+        self.bitDepth = bitDepth
 
-        // Output format: PCM int32 (normalized output)
-        guard let pcmFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt32,
-            sampleRate: Double(sampleRate),
-            channels: AVAudioChannelCount(channels),
-            interleaved: true
-        ) else {
-            throw AudioDecoderError.formatCreationFailed("PCM output format")
+        // Create FLAC stream decoder
+        guard let flacDecoder = FLAC__stream_decoder_new() else {
+            throw AudioDecoderError.formatCreationFailed("Failed to create FLAC stream decoder")
         }
+        self.decoder = flacDecoder
 
-        guard let audioConverter = AVAudioConverter(from: flacFormat, to: pcmFormat) else {
-            throw AudioDecoderError.converterCreationFailed
+        // Initialize decoder with callbacks
+        // We need to use Unmanaged to pass self to C callbacks
+        let clientData = Unmanaged.passUnretained(self).toOpaque()
+
+        let initStatus = FLAC__stream_decoder_init_stream(
+            decoder,
+            { decoder, buffer, bytes, clientData -> FLAC__StreamDecoderReadStatus in
+                guard let clientData = clientData else {
+                    return FLAC__STREAM_DECODER_READ_STATUS_ABORT
+                }
+                let selfRef = Unmanaged<FLACDecoder>.fromOpaque(clientData).takeUnretainedValue()
+                return selfRef.readCallback(buffer: buffer, bytes: bytes)
+            },
+            nil,  // seek callback (optional)
+            nil,  // tell callback (optional)
+            nil,  // length callback (optional)
+            nil,  // eof callback (optional)
+            { decoder, frame, buffer, clientData -> FLAC__StreamDecoderWriteStatus in
+                guard let clientData = clientData else {
+                    return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT
+                }
+                let selfRef = Unmanaged<FLACDecoder>.fromOpaque(clientData).takeUnretainedValue()
+                return selfRef.writeCallback(frame: frame, buffer: buffer)
+            },
+            nil,  // metadata callback (optional)
+            { decoder, status, clientData in
+                // Error callback - just log for now
+                print("FLAC decoder error: \(status)")
+            },
+            clientData
+        )
+
+        guard initStatus == FLAC__STREAM_DECODER_INIT_STATUS_OK else {
+            FLAC__stream_decoder_delete(flacDecoder)
+            throw AudioDecoderError.formatCreationFailed("FLAC decoder init failed: \(initStatus)")
         }
-
-        self.inputFormat = flacFormat
-        self.outputFormat = pcmFormat
-        self.converter = audioConverter
     }
 
     public func decode(_ data: Data) throws -> Data {
-        // Create input buffer from FLAC frame data
-        let bytesPerFrame = Int(inputFormat.streamDescription.pointee.mBytesPerFrame)
-        let frameLength = AVAudioFrameCount(data.count / bytesPerFrame)
-        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameLength) else {
-            throw AudioDecoderError.bufferCreationFailed
-        }
-        inputBuffer.frameLength = frameLength
+        // Append new data to pending buffer
+        pendingData.append(data)
+        readOffset = 0
+        decodedSamples.removeAll(keepingCapacity: true)
 
-        // Copy FLAC data to buffer
-        data.withUnsafeBytes { srcBytes in
-            guard let src = srcBytes.baseAddress else { return }
-            memcpy(inputBuffer.audioBufferList.pointee.mBuffers.mData, src, data.count)
+        // Process single frame
+        guard let decoder = decoder else {
+            throw AudioDecoderError.conversionFailed("FLAC decoder not initialized")
         }
 
-        // Create output buffer (decoded PCM)
-        let outputFrameCapacity = frameLength * 4  // FLAC compression ratio
-        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputFrameCapacity) else {
-            throw AudioDecoderError.bufferCreationFailed
+        // Process until we've consumed the data or decoded a frame
+        let success = FLAC__stream_decoder_process_single(decoder)
+        guard success != 0 else {
+            let state = FLAC__stream_decoder_get_state(decoder)
+            throw AudioDecoderError.conversionFailed("FLAC frame processing failed: state=\(state)")
         }
 
-        // Convert FLAC → PCM
-        var error: NSError?
-        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-            outStatus.pointee = .haveData
-            return inputBuffer
+        // Return decoded samples as Data
+        return decodedSamples.withUnsafeBytes { Data($0) }
+    }
+
+    private func readCallback(buffer: UnsafeMutablePointer<FLAC__byte>?, bytes: UnsafeMutablePointer<Int>?) -> FLAC__StreamDecoderReadStatus {
+        guard let buffer = buffer, let bytes = bytes else {
+            return FLAC__STREAM_DECODER_READ_STATUS_ABORT
         }
 
-        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
+        let bytesToRead = min(bytes.pointee, pendingData.count - readOffset)
 
-        if let error = error {
-            throw AudioDecoderError.conversionFailed(error.localizedDescription)
+        guard bytesToRead > 0 else {
+            bytes.pointee = 0
+            return FLAC__STREAM_DECODER_READ_STATUS_END_OF_STREAM
         }
 
-        // Extract PCM data from output buffer
-        let outputData = Data(bytes: outputBuffer.audioBufferList.pointee.mBuffers.mData!,
-                              count: Int(outputBuffer.audioBufferList.pointee.mBuffers.mDataByteSize))
-        return outputData
+        // Copy data from pending buffer
+        pendingData.withUnsafeBytes { srcBytes in
+            let src = srcBytes.baseAddress!.advanced(by: readOffset)
+            memcpy(buffer, src, bytesToRead)
+        }
+
+        readOffset += bytesToRead
+        bytes.pointee = bytesToRead
+
+        return FLAC__STREAM_DECODER_READ_STATUS_CONTINUE
+    }
+
+    private func writeCallback(frame: UnsafePointer<FLAC__Frame>?, buffer: UnsafePointer<UnsafePointer<FLAC__int32>?>?) -> FLAC__StreamDecoderWriteStatus {
+        guard let frame = frame, let buffer = buffer else {
+            return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT
+        }
+
+        let blocksize = Int(frame.pointee.header.blocksize)
+
+        // FLAC outputs int32 samples per channel
+        // Interleave channels if stereo
+        for i in 0..<blocksize {
+            for channel in 0..<channels {
+                guard let channelBuffer = buffer[channel] else {
+                    return FLAC__STREAM_DECODER_WRITE_STATUS_ABORT
+                }
+                let sample = channelBuffer[i]
+
+                // Normalize based on bit depth
+                // FLAC int32 samples are right-aligned, shift to match our format
+                let normalizedSample: Int32
+                if bitDepth == 16 {
+                    // 16-bit: shift left 8 bits (to 24-bit position)
+                    normalizedSample = sample << 8
+                } else if bitDepth == 24 {
+                    // 24-bit: already correct position
+                    normalizedSample = sample
+                } else {
+                    // 32-bit or other: pass through
+                    normalizedSample = sample
+                }
+
+                decodedSamples.append(normalizedSample)
+            }
+        }
+
+        return FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE
+    }
+
+    deinit {
+        if let decoder = decoder {
+            FLAC__stream_decoder_finish(decoder)
+            FLAC__stream_decoder_delete(decoder)
+        }
     }
 }
 
