@@ -147,6 +147,7 @@ public class FLACDecoder: AudioDecoder {
     private var pendingData: Data = Data()
     private var decodedSamples: [Int32] = []
     private var readOffset: Int = 0
+    private var lastError: FLAC__StreamDecoderErrorStatus?
 
     public init(sampleRate: Int, channels: Int, bitDepth: Int) throws {
         self.sampleRate = sampleRate
@@ -185,8 +186,10 @@ public class FLACDecoder: AudioDecoder {
             },
             nil,  // metadata callback (optional)
             { decoder, status, clientData in
-                // Error callback - just log for now
-                print("FLAC decoder error: \(status)")
+                // Error callback - store error for later checking
+                guard let clientData = clientData else { return }
+                let selfRef = Unmanaged<FLACDecoder>.fromOpaque(clientData).takeUnretainedValue()
+                selfRef.lastError = status
             },
             clientData
         )
@@ -202,6 +205,7 @@ public class FLACDecoder: AudioDecoder {
         pendingData.append(data)
         readOffset = 0
         decodedSamples.removeAll(keepingCapacity: true)
+        lastError = nil
 
         // Process single frame
         guard let decoder = decoder else {
@@ -214,6 +218,14 @@ public class FLACDecoder: AudioDecoder {
             let state = FLAC__stream_decoder_get_state(decoder)
             throw AudioDecoderError.conversionFailed("FLAC frame processing failed: state=\(state)")
         }
+
+        // Check for errors reported via error callback
+        if let error = lastError {
+            throw AudioDecoderError.conversionFailed("FLAC decoder error: \(error)")
+        }
+
+        // Remove consumed bytes from pending buffer to prevent memory leak
+        pendingData.removeFirst(readOffset)
 
         // Return decoded samples as Data
         return decodedSamples.withUnsafeBytes { Data($0) }
