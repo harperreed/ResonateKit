@@ -40,7 +40,7 @@ jobs:
         run: |
           xcrun llvm-cov export \
             -format="lcov" \
-            .build/debug/MusicAssistantKitPackageTests.xctest/Contents/MacOS/MusicAssistantKitPackageTests \
+            .build/debug/ResonateKitPackageTests.xctest/Contents/MacOS/ResonateKitPackageTests \
             -instr-profile .build/debug/codecov/default.profdata \
             > coverage.lcov
 
@@ -55,13 +55,13 @@ jobs:
         id: coverage
         run: |
           xcrun llvm-cov report \
-            .build/debug/MusicAssistantKitPackageTests.xctest/Contents/MacOS/MusicAssistantKitPackageTests \
+            .build/debug/ResonateKitPackageTests.xctest/Contents/MacOS/ResonateKitPackageTests \
             -instr-profile .build/debug/codecov/default.profdata \
             > coverage-report.txt
 
           # Extract coverage percentage
           COVERAGE=$(xcrun llvm-cov report \
-            .build/debug/MusicAssistantKitPackageTests.xctest/Contents/MacOS/MusicAssistantKitPackageTests \
+            .build/debug/ResonateKitPackageTests.xctest/Contents/MacOS/ResonateKitPackageTests \
             -instr-profile .build/debug/codecov/default.profdata | \
             grep TOTAL | awk '{print $10}')
 
