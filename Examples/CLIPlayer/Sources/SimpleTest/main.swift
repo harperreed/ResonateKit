@@ -35,7 +35,7 @@ struct SimpleTest {
         let client = ResonateClient(
             clientId: UUID().uuidString,
             name: "Simple Test Client",
-            roles: [.player],
+            roles: [.player, .metadata],  // Added .metadata role to test metadata delivery
             playerConfig: config
         )
 
@@ -54,6 +54,11 @@ struct SimpleTest {
                     if let state = info.playbackState {
                         print("📻 Group \(info.groupName): \(state)")
                     }
+                case let .metadataReceived(metadata):
+                    print("🎵 Metadata:")
+                    print("   Title:  \(metadata.title ?? "none")")
+                    print("   Artist: \(metadata.artist ?? "none")")
+                    print("   Album:  \(metadata.album ?? "none")")
                 case let .error(message):
                     print("⚠️  Error: \(message)")
                 default:

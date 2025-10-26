@@ -449,20 +449,20 @@ public final class ResonateClient {
         // IMPORTANT: Order matters! Messages with more specific/required fields must come before
         // messages with all-optional fields, otherwise the all-optional ones will match everything.
 
-        if let message = try? decoder.decode(ServerHelloMessage.self, from: data) {
+        if let message = try? decoder.decode(ServerHelloMessage.self, from: data), message.type == msgType {
             await handleServerHello(message)
-        } else if let message = try? decoder.decode(ServerTimeMessage.self, from: data) {
+        } else if let message = try? decoder.decode(ServerTimeMessage.self, from: data), message.type == msgType {
             await handleServerTime(message)
-        } else if let message = try? decoder.decode(SessionUpdateMessage.self, from: data) {
-            await handleSessionUpdate(message)
-        } else if let message = try? decoder.decode(GroupUpdateMessage.self, from: data) {
-            await handleGroupUpdate(message)
-        } else if let message = try? decoder.decode(StreamMetadataMessage.self, from: data) {
-            await handleStreamMetadata(message)
-        } else if let message = try? decoder.decode(StreamStartMessage.self, from: data) {
+        } else if let message = try? decoder.decode(StreamStartMessage.self, from: data), message.type == msgType {
             await handleStreamStart(message)
-        } else if let message = try? decoder.decode(StreamEndMessage.self, from: data) {
+        } else if let message = try? decoder.decode(StreamEndMessage.self, from: data), message.type == msgType {
             await handleStreamEnd(message)
+        } else if let message = try? decoder.decode(StreamMetadataMessage.self, from: data), message.type == msgType {
+            await handleStreamMetadata(message)
+        } else if let message = try? decoder.decode(GroupUpdateMessage.self, from: data), message.type == msgType {
+            await handleGroupUpdate(message)
+        } else if let message = try? decoder.decode(SessionUpdateMessage.self, from: data), message.type == msgType {
+            await handleSessionUpdate(message)
         } else {
             // Unknown message type - log to stderr to avoid breaking TUI
             // Show first 500 chars to debug
@@ -537,10 +537,7 @@ public final class ResonateClient {
     }
 
     private func handleStreamStart(_ message: StreamStartMessage) async {
-        // print("[CLIENT] 🎬 handleStreamStart called")
-
         guard let playerInfo = message.payload.player else {
-            // print("[CLIENT] ❌ No player info in stream/start payload")
             return
         }
 
@@ -574,36 +571,33 @@ public final class ResonateClient {
             codecHeader = Data(base64Encoded: headerBase64)
         }
 
+        // Check if already playing to avoid duplicate events
+        let wasPlaying = await audioPlayer.isPlaying
+
         do {
-            // print("[CLIENT] 🎵 Starting audio player...")
             try await audioPlayer.start(format: format, codecHeader: codecHeader)
-            playerState = "playing" // Successfully started
-            // print("[CLIENT] ✅ Audio player started successfully")
-
-            // Start scheduler
-            // print("[CLIENT] 📅 Starting AudioScheduler...")
+            playerState = "playing"
             await audioScheduler?.startScheduling()
-            // print("[CLIENT] ✅ AudioScheduler started")
 
-            eventsContinuation.yield(.streamStarted(format))
-            try? await sendClientState() // Notify server we're playing
+            // Only yield event if this was a new stream start (not a format re-announcement)
+            if !wasPlaying {
+                eventsContinuation.yield(.streamStarted(format))
+            }
+            try? await sendClientState()
         } catch {
-            // print("[CLIENT] ❌ Failed to start audio: \(error)")
             connectionState = .error("Failed to start audio: \(error.localizedDescription)")
             playerState = "error"
-            try? await sendClientState() // Notify server of error state
+            try? await sendClientState()
         }
     }
 
     private func handleStreamEnd(_: StreamEndMessage) async {
         guard let audioPlayer = audioPlayer else { return }
 
-        // print("[CLIENT] Stopping AudioScheduler")
         await audioScheduler?.stop()
-        // print("[CLIENT] Clearing AudioScheduler queue")
         await audioScheduler?.clear()
         await audioPlayer.stop()
-        playerState = "idle" // Back to idle state
+        playerState = "idle"
         eventsContinuation.yield(.streamEnded)
     }
 
@@ -670,14 +664,18 @@ public final class ResonateClient {
         let isPlaying = await audioPlayer.isPlaying
         if !isPlaying, !isAutoStarting {
             isAutoStarting = true
-            // print("[CLIENT] 🎵 Auto-starting player with default format (PCM 48kHz 2ch 16bit)")
+
+            // Use most compatible format (48kHz 16-bit) as fallback for auto-start
+            // Server will send stream/start with actual format if different
+            // We use index 4 (48kHz 16-bit) as it's most universally supported
+            guard let defaultFormat = playerConfig?.supportedFormats.dropFirst(4).first else {
+                // print("[CLIENT] ❌ No supported formats configured")
+                isAutoStarting = false
+                return
+            }
+
+            // print("[CLIENT] 🎵 Auto-starting with highest priority format: \(defaultFormat.codec.rawValue) \(defaultFormat.sampleRate)Hz \(defaultFormat.channels)ch \(defaultFormat.bitDepth)bit")
             do {
-                let defaultFormat = AudioFormatSpec(
-                    codec: .pcm,
-                    channels: 2,
-                    sampleRate: 48000,
-                    bitDepth: 16
-                )
                 try await audioPlayer.start(format: defaultFormat, codecHeader: nil)
                 playerState = "playing"
 

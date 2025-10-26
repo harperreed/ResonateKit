@@ -64,11 +64,16 @@ public actor AudioPlayer {
         audioFormat.mSampleRate = Float64(format.sampleRate)
         audioFormat.mFormatID = kAudioFormatLinearPCM
         audioFormat.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked
-        audioFormat.mBytesPerPacket = UInt32(format.channels * format.bitDepth / 8)
         audioFormat.mFramesPerPacket = 1
-        audioFormat.mBytesPerFrame = UInt32(format.channels * format.bitDepth / 8)
         audioFormat.mChannelsPerFrame = UInt32(format.channels)
-        audioFormat.mBitsPerChannel = UInt32(format.bitDepth)
+
+        // For 24-bit, decoder unpacks to 32-bit Int32, so configure AudioQueue for 32-bit
+        let effectiveBitDepth = (format.bitDepth == 24) ? 32 : format.bitDepth
+        let bytesPerSample = effectiveBitDepth / 8
+
+        audioFormat.mBytesPerPacket = UInt32(format.channels * bytesPerSample)
+        audioFormat.mBytesPerFrame = UInt32(format.channels * bytesPerSample)
+        audioFormat.mBitsPerChannel = UInt32(effectiveBitDepth)
 
         // Create AudioQueue
         var queue: AudioQueueRef?

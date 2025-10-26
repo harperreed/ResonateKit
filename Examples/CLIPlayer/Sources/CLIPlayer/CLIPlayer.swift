@@ -25,11 +25,22 @@ final class CLIPlayer {
         }
 
         // Create player configuration
-        // IMPORTANT: Only advertise PCM until Opus/FLAC decoders are implemented
+        // Advertise all supported formats (in priority order, matching Go implementation)
         let config = PlayerConfiguration(
             bufferCapacity: 2_097_152, // 2MB buffer
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                // Hi-res PCM formats (24-bit)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 192_000, bitDepth: 24),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 176_400, bitDepth: 24),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 96_000, bitDepth: 24),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 88_200, bitDepth: 24),
+                // Standard PCM formats (16-bit)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48_000, bitDepth: 16),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 44_100, bitDepth: 16),
+                // Compressed formats (Opus and FLAC)
+                AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48_000, bitDepth: 16),
+                AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 48_000, bitDepth: 16),
+                AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44_100, bitDepth: 16)
             ]
         )
 

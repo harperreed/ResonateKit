@@ -1,0 +1,1038 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where empty lines have been removed, line numbers have been added.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: **/*
+- Files matching these patterns are excluded: **/*.log, **/uv.lock, **/package-lock.json, **/.env, **/Cargo.lock, **/node_modules, **/target, **/dist, **/build, **/output.txt, **/yarn.lock, **/uv.lock, **/package-lock.json, **/.env, **/Cargo.lock, **/node_modules, **/target, **/dist, **/build, **/output.txt, **/yarn.lock, **/.private-journal
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Empty lines have been removed from all files
+- Line numbers have been added to the beginning of each line
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+Sources/
+  AudioTest/
+    main.swift
+  CLIPlayer/
+    CLIPlayer.swift
+    main.swift
+  SimpleTest/
+    main.swift
+.gitignore
+code-review.md
+Package.resolved
+Package.swift
+README.md
+sample-3s.pcm
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="Sources/AudioTest/main.swift">
+ 1: // ABOUTME: Simple test to verify AudioPlayer can play audio through speakers
+ 2: // ABOUTME: Plays a local PCM file to test basic audio output functionality
+ 3: import Foundation
+ 4: import ResonateKit
+ 5: @main
+ 6: struct AudioTest {
+ 7:     static func main() async throws {
+ 8:         print("🔊 Audio Player Test")
+ 9:         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+10:         // Load PCM file
+11:         let fileURL = URL(fileURLWithPath: "sample-3s.pcm")
+12:         guard let audioData = try? Data(contentsOf: fileURL) else {
+13:             print("❌ Failed to load sample-3s.pcm")
+14:             print("Make sure the file exists in the current directory")
+15:             return
+16:         }
+17:         print("✅ Loaded \(audioData.count) bytes of PCM audio")
+18:         // Create audio player
+19:         let bufferManager = BufferManager(capacity: 2_097_152)
+20:         let clockSync = ClockSynchronizer()
+21:         let audioPlayer = AudioPlayer(
+22:             bufferManager: bufferManager,
+23:             clockSync: clockSync
+24:         )
+25:         // Configure for PCM 48kHz stereo 16-bit
+26:         let format = AudioFormatSpec(
+27:             codec: .pcm,
+28:             channels: 2,
+29:             sampleRate: 48000,
+30:             bitDepth: 16
+31:         )
+32:         print("🎵 Starting audio playback...")
+33:         try await audioPlayer.start(format: format, codecHeader: Data?.none)
+34:         // Feed audio in chunks using new playPCM API
+35:         let chunkSize = 4096 // bytes
+36:         var offset = 0
+37:         var chunkIndex = 0
+38:         while offset < audioData.count {
+39:             let remainingBytes = audioData.count - offset
+40:             let bytesToRead = min(chunkSize, remainingBytes)
+41:             let chunk = audioData.subdata(in: offset ..< (offset + bytesToRead))
+42:             // Use new direct PCM playback method
+43:             try await audioPlayer.playPCM(chunk)
+44:             chunkIndex += 1
+45:             if chunkIndex % 10 == 0 {
+46:                 print("  Playing chunk \(chunkIndex) (\(offset) / \(audioData.count) bytes)")
+47:             }
+48:             offset += bytesToRead
+49:             // Small delay to avoid overwhelming the buffer
+50:             try await Task.sleep(for: .milliseconds(10))
+51:         }
+52:         print("✅ All audio enqueued, waiting for playback to finish...")
+53:         // Wait for audio to finish playing (3 seconds + buffer)
+54:         try await Task.sleep(for: .seconds(4))
+55:         await audioPlayer.stop()
+56:         print("✅ Playback complete!")
+57:     }
+58: }
+</file>
+
+<file path="Sources/CLIPlayer/CLIPlayer.swift">
+  1: // ABOUTME: Example CLI player demonstrating ResonateKit usage
+  2: // ABOUTME: Connects to a Resonate server and plays synchronized audio
+  3: import Foundation
+  4: import ResonateKit
+  5: /// Simple CLI player for Resonate Protocol
+  6: final class CLIPlayer {
+  7:     private var client: ResonateClient?
+  8:     private var eventTask: Task<Void, Never>?
+  9:     private var statsTask: Task<Void, Never>?
+ 10:     private let display = StatusDisplay()
+ 11:     @MainActor
+ 12:     func run(serverURL: String, clientName: String, useTUI: Bool = true) async throws {
+ 13:         // Simple startup banner before TUI takes over
+ 14:         print("🎵 Resonate CLI Player")
+ 15:         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+ 16:         print("Initializing...")
+ 17:         // Parse URL
+ 18:         guard let url = URL(string: serverURL) else {
+ 19:             print("❌ Invalid server URL: \(serverURL)")
+ 20:             throw CLIPlayerError.invalidURL
+ 21:         }
+ 22:         // Create player configuration
+ 23:         // Advertise all supported formats (in priority order, matching Go implementation)
+ 24:         let config = PlayerConfiguration(
+ 25:             bufferCapacity: 2_097_152, // 2MB buffer
+ 26:             supportedFormats: [
+ 27:                 // Hi-res PCM formats (24-bit)
+ 28:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 192_000, bitDepth: 24),
+ 29:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 176_400, bitDepth: 24),
+ 30:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 96_000, bitDepth: 24),
+ 31:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 88_200, bitDepth: 24),
+ 32:                 // Standard PCM formats (16-bit)
+ 33:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48_000, bitDepth: 16),
+ 34:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 44_100, bitDepth: 16),
+ 35:                 // Compressed formats (Opus and FLAC)
+ 36:                 AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48_000, bitDepth: 16),
+ 37:                 AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 48_000, bitDepth: 16),
+ 38:                 AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44_100, bitDepth: 16)
+ 39:             ]
+ 40:         )
+ 41:         // Create client
+ 42:         let client = ResonateClient(
+ 43:             clientId: UUID().uuidString,
+ 44:             name: clientName,
+ 45:             roles: [.player, .metadata],
+ 46:             playerConfig: config
+ 47:         )
+ 48:         self.client = client
+ 49:         // Start event monitoring
+ 50:         eventTask = Task {
+ 51:             await monitorEvents(client: client, useTUI: useTUI)
+ 52:         }
+ 53:         // Start stats monitoring
+ 54:         statsTask = Task {
+ 55:             await monitorStats(client: client)
+ 56:         }
+ 57:         // Connect to server
+ 58:         try await client.connect(to: url)
+ 59:         // Small delay to let initial messages settle
+ 60:         try? await Task.sleep(for: .milliseconds(500))
+ 61:         if useTUI {
+ 62:             // Start TUI
+ 63:             await display.start()
+ 64:             // Run command loop on background thread to avoid blocking MainActor
+ 65:             let commandTask = Task.detached { [display] in
+ 66:                 await CLIPlayer.runCommandLoopStatic(client: client, display: display)
+ 67:             }
+ 68:             await commandTask.value
+ 69:             // Clean up TUI
+ 70:             await display.stop()
+ 71:         } else {
+ 72:             // No TUI mode - just wait forever and log events
+ 73:             print("✅ Connected! Logging mode (press Ctrl-C to exit)")
+ 74:             print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+ 75:             // Wait forever (sleep in a loop to avoid Duration overflow)
+ 76:             while true {
+ 77:                 try? await Task.sleep(for: .seconds(3600)) // 1 hour at a time
+ 78:             }
+ 79:         }
+ 80:     }
+ 81:     @MainActor
+ 82:     private func monitorEvents(client: ResonateClient, useTUI: Bool) async {
+ 83:         for await event in client.events {
+ 84:             switch event {
+ 85:             case let .serverConnected(info):
+ 86:                 if useTUI {
+ 87:                     await display.updateServer(name: info.name)
+ 88:                 } else {
+ 89:                     print("[EVENT] Server connected: \(info.name) (v\(info.version))")
+ 90:                 }
+ 91:             case let .streamStarted(format):
+ 92:                 let formatStr = "\(format.codec.rawValue) \(format.sampleRate)Hz " +
+ 93:                     "\(format.channels)ch \(format.bitDepth)bit"
+ 94:                 if useTUI {
+ 95:                     await display.updateStream(format: formatStr)
+ 96:                 } else {
+ 97:                     print("[EVENT] Stream started: \(formatStr)")
+ 98:                 }
+ 99:             case .streamEnded:
+100:                 if useTUI {
+101:                     await display.updateStream(format: "No stream")
+102:                 } else {
+103:                     print("[EVENT] Stream ended")
+104:                 }
+105:             case let .groupUpdated(info):
+106:                 if !useTUI {
+107:                     print("[EVENT] Group updated: \(info.groupName) (\(info.playbackState ?? "unknown"))")
+108:                 }
+109:             case let .metadataReceived(metadata):
+110:                 if useTUI {
+111:                     await display.updateMetadata(
+112:                         title: metadata.title,
+113:                         artist: metadata.artist,
+114:                         album: metadata.album
+115:                     )
+116:                 } else {
+117:                     print("[METADATA] Track: \(metadata.title ?? "unknown")")
+118:                     print("[METADATA] Artist: \(metadata.artist ?? "unknown")")
+119:                     print("[METADATA] Album: \(metadata.album ?? "unknown")")
+120:                     if let duration = metadata.duration {
+121:                         print("[METADATA] Duration: \(duration)s")
+122:                     }
+123:                 }
+124:             case let .artworkReceived(channel, data):
+125:                 if !useTUI {
+126:                     print("[EVENT] Artwork received on channel \(channel): \(data.count) bytes")
+127:                 }
+128:             case let .visualizerData(data):
+129:                 if !useTUI {
+130:                     print("[EVENT] Visualizer data: \(data.count) bytes")
+131:                 }
+132:             case let .error(message):
+133:                 if !useTUI {
+134:                     print("[ERROR] \(message)")
+135:                 }
+136:             }
+137:         }
+138:     }
+139:     @MainActor
+140:     private func monitorStats(client _: ResonateClient) async {
+141:         while !Task.isCancelled {
+142:             // Update volume from client
+143:             // Note: Would need to expose these as observable properties
+144:             // For now, we'll update them from command loop
+145:             try? await Task.sleep(for: .milliseconds(100))
+146:         }
+147:     }
+148:     private nonisolated static func runCommandLoopStatic(client: ResonateClient, display: StatusDisplay) async {
+149:         while let line = readLine() {
+150:             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+151:             guard !trimmedLine.isEmpty else {
+152:                 continue
+153:             }
+154:             let parts = line.split(separator: " ")
+155:             guard let command = parts.first else { continue }
+156:             switch command.lowercased() {
+157:             case "q", "quit", "exit":
+158:                 await client.disconnect()
+159:                 return
+160:             case "v", "volume":
+161:                 guard parts.count > 1, let volume = Float(parts[1]) else {
+162:                     continue
+163:                 }
+164:                 await client.setVolume(volume / 100.0)
+165:                 await display.updateVolume(Int(volume), muted: false)
+166:             case "m", "mute":
+167:                 await client.setMute(true)
+168:                 await display.updateVolume(100, muted: true)
+169:             case "u", "unmute":
+170:                 await client.setMute(false)
+171:                 await display.updateVolume(100, muted: false)
+172:             default:
+173:                 break // Ignore unknown commands in TUI mode
+174:             }
+175:         }
+176:     }
+177:     deinit {
+178:         eventTask?.cancel()
+179:         // Disconnect client on cleanup
+180:         Task { @MainActor [weak client] in
+181:             await client?.disconnect()
+182:         }
+183:     }
+184: }
+185: enum CLIPlayerError: Error {
+186:     case invalidURL
+187: }
+188: // MARK: - Terminal UI
+189: /// ANSI terminal control codes
+190: enum ANSI {
+191:     static let clearScreen = "\u{001B}[2J"
+192:     static let home = "\u{001B}[H"
+193:     static let hideCursor = "\u{001B}[?25l"
+194:     static let showCursor = "\u{001B}[?25h"
+195:     static let saveCursor = "\u{001B}[s"
+196:     static let restoreCursor = "\u{001B}[u"
+197:     // Colors
+198:     static let reset = "\u{001B}[0m"
+199:     static let bold = "\u{001B}[1m"
+200:     static let dim = "\u{001B}[2m"
+201:     static let green = "\u{001B}[32m"
+202:     static let yellow = "\u{001B}[33m"
+203:     static let blue = "\u{001B}[34m"
+204:     static let magenta = "\u{001B}[35m"
+205:     static let cyan = "\u{001B}[36m"
+206:     static let red = "\u{001B}[31m"
+207:     static func moveTo(row: Int, col: Int) -> String {
+208:         return "\u{001B}[\(row);\(col)H"
+209:     }
+210: }
+211: /// Live-updating status display for the CLI player
+212: actor StatusDisplay {
+213:     private var displayTask: Task<Void, Never>?
+214:     private var isRunning = false
+215:     // State
+216:     private var serverName: String = "Not connected"
+217:     private var streamFormat: String = "No stream"
+218:     private var trackTitle: String?
+219:     private var trackArtist: String?
+220:     private var trackAlbum: String?
+221:     private var clockOffset: Int64 = 0
+222:     private var clockRTT: Int64 = 0
+223:     private var clockQuality: String = "lost"
+224:     private var chunksReceived: Int = 0
+225:     private var chunksPlayed: Int = 0
+226:     private var chunksDropped: Int = 0
+227:     private var bufferMs: Double = 0.0
+228:     private var volume: Int = 100
+229:     private var isMuted: Bool = false
+230:     private var uptime: TimeInterval = 0
+231:     private let startTime = Date()
+232:     init() {}
+233:     func start() {
+234:         guard !isRunning else { return }
+235:         isRunning = true
+236:         // Hide cursor and clear screen
+237:         print(ANSI.hideCursor, terminator: "")
+238:         print(ANSI.clearScreen, terminator: "")
+239:         fflush(stdout)
+240:         displayTask = Task {
+241:             while !Task.isCancelled && isRunning {
+242:                 await render()
+243:                 try? await Task.sleep(for: .milliseconds(100))
+244:             }
+245:         }
+246:     }
+247:     func stop() {
+248:         isRunning = false
+249:         displayTask?.cancel()
+250:         displayTask = nil
+251:         // Show cursor
+252:         print(ANSI.showCursor, terminator: "")
+253:         fflush(stdout)
+254:     }
+255:     // Update methods
+256:     func updateServer(name: String) {
+257:         serverName = name
+258:     }
+259:     func updateStream(format: String) {
+260:         streamFormat = format
+261:     }
+262:     func updateClock(offset: Int64, rtt: Int64, quality: String) {
+263:         clockOffset = offset
+264:         clockRTT = rtt
+265:         clockQuality = quality
+266:     }
+267:     func updateStats(received: Int, played: Int, dropped: Int, bufferMs: Double) {
+268:         chunksReceived = received
+269:         chunksPlayed = played
+270:         chunksDropped = dropped
+271:         self.bufferMs = bufferMs
+272:     }
+273:     func updateVolume(_ vol: Int, muted: Bool) {
+274:         volume = vol
+275:         isMuted = muted
+276:     }
+277:     func updateMetadata(title: String?, artist: String?, album: String?) {
+278:         trackTitle = title
+279:         trackArtist = artist
+280:         trackAlbum = album
+281:     }
+282:     private func render() {
+283:         uptime = Date().timeIntervalSince(startTime)
+284:         var output = ANSI.home
+285:         // Header
+286:         output += "\(ANSI.bold)\(ANSI.cyan)"
+287:         output += "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n"
+288:         output += "┃                      🎵 RESONATE CLI PLAYER 🎵                          ┃\n"
+289:         output += "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n"
+290:         output += ANSI.reset
+291:         output += "\n"
+292:         // Connection info
+293:         output += "\(ANSI.bold)CONNECTION\(ANSI.reset)\n"
+294:         output += "  Server:  \(ANSI.green)\(serverName)\(ANSI.reset)\n"
+295:         output += "  Uptime:  \(formatDuration(uptime))\n"
+296:         output += "\n"
+297:         // Stream info
+298:         output += "\(ANSI.bold)STREAM\(ANSI.reset)\n"
+299:         output += "  Format:  \(ANSI.blue)\(streamFormat)\(ANSI.reset)\n"
+300:         if let title = trackTitle {
+301:             output += "  Track:   \(ANSI.magenta)\(title)\(ANSI.reset)\n"
+302:         }
+303:         if let artist = trackArtist {
+304:             output += "  Artist:  \(artist)\n"
+305:         }
+306:         if let album = trackAlbum {
+307:             output += "  Album:   \(album)\n"
+308:         }
+309:         output += "\n"
+310:         // Clock sync
+311:         let qualityColor = clockQuality == "good" ? ANSI.green : (clockQuality == "degraded" ? ANSI.yellow : ANSI.red)
+312:         output += "\(ANSI.bold)CLOCK SYNC\(ANSI.reset)\n"
+313:         output += "  Offset:  \(formatMicroseconds(clockOffset))\n"
+314:         output += "  RTT:     \(formatMicroseconds(clockRTT))\n"
+315:         output += "  Quality: \(qualityColor)\(clockQuality)\(ANSI.reset)\n"
+316:         output += "\n"
+317:         // Playback stats
+318:         output += "\(ANSI.bold)PLAYBACK\(ANSI.reset)\n"
+319:         output += "  Received: \(ANSI.cyan)\(chunksReceived)\(ANSI.reset) chunks\n"
+320:         output += "  Played:   \(ANSI.green)\(chunksPlayed)\(ANSI.reset) chunks\n"
+321:         output += "  Dropped:  \(chunksDropped > 0 ? ANSI.red : ANSI.dim)\(chunksDropped)\(ANSI.reset) chunks\n"
+322:         output += "  Buffer:   \(formatBuffer(bufferMs))\n"
+323:         output += "\n"
+324:         // Volume
+325:         output += "\(ANSI.bold)AUDIO\(ANSI.reset)\n"
+326:         let volumeBar = makeVolumeBar(volume: volume, muted: isMuted)
+327:         output += "  Volume:  \(volumeBar)\n"
+328:         output += "\n"
+329:         // Commands
+330:         output += "\(ANSI.dim)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\(ANSI.reset)\n"
+331:         output += "\(ANSI.dim)Commands: [v <0-100>] volume  [m] mute  [u] unmute  [q] quit\(ANSI.reset)\n"
+332:         output += "\(ANSI.dim)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\(ANSI.reset)\n"
+333:         output += "> "
+334:         print(output, terminator: "")
+335:         fflush(stdout)
+336:     }
+337:     private func formatDuration(_ seconds: TimeInterval) -> String {
+338:         let hours = Int(seconds) / 3600
+339:         let minutes = (Int(seconds) % 3600) / 60
+340:         let secs = Int(seconds) % 60
+341:         if hours > 0 {
+342:             return String(format: "%02d:%02d:%02d", hours, minutes, secs)
+343:         } else {
+344:             return String(format: "%02d:%02d", minutes, secs)
+345:         }
+346:     }
+347:     private func formatMicroseconds(_ microseconds: Int64) -> String {
+348:         let absMicroseconds = abs(microseconds)
+349:         if absMicroseconds < 1000 {
+350:             return "\(microseconds)μs"
+351:         } else if absMicroseconds < 1_000_000 {
+352:             let milliseconds = Double(microseconds) / 1000.0
+353:             return String(format: "%.1fms", milliseconds)
+354:         } else {
+355:             let seconds = Double(microseconds) / 1_000_000.0
+356:             return String(format: "%.2fs", seconds)
+357:         }
+358:     }
+359:     private func formatBuffer(_ milliseconds: Double) -> String {
+360:         let color = milliseconds < 50 ? ANSI.red : (milliseconds < 100 ? ANSI.yellow : ANSI.green)
+361:         return "\(color)\(String(format: "%.1fms", milliseconds))\(ANSI.reset)"
+362:     }
+363:     private func makeVolumeBar(volume: Int, muted: Bool) -> String {
+364:         if muted {
+365:             return "\(ANSI.red)🔇 MUTED\(ANSI.reset)"
+366:         }
+367:         let barWidth = 20
+368:         let filled = (volume * barWidth) / 100
+369:         let empty = barWidth - filled
+370:         let bar = String(repeating: "█", count: filled) + String(repeating: "░", count: empty)
+371:         let color = volume > 80 ? ANSI.green : (volume > 40 ? ANSI.yellow : ANSI.red)
+372:         return "\(color)\(bar)\(ANSI.reset) \(volume)%"
+373:     }
+374: }
+</file>
+
+<file path="Sources/CLIPlayer/main.swift">
+ 1: // ABOUTME: Main entry point for CLI player
+ 2: // ABOUTME: Handles command-line arguments and launches the player
+ 3: import Foundation
+ 4: import ResonateKit
+ 5: // Top-level async entry point (Swift 5.5+)
+ 6: let args = CommandLine.arguments
+ 7: // Parse command line arguments
+ 8: var serverURL: String?
+ 9: var clientName = "CLI Player"
+10: var enableTUI = true
+11: var argIndex = 1
+12: while argIndex < args.count {
+13:     let arg = args[argIndex]
+14:     if arg == "--no-tui" {
+15:         enableTUI = false
+16:     } else if arg.starts(with: "ws://") {
+17:         serverURL = arg
+18:     } else if !arg.starts(with: "--") {
+19:         clientName = arg
+20:     }
+21:     argIndex += 1
+22: }
+23: // Discover or use provided server URL
+24: if serverURL == nil {
+25:     print("🔍 Discovering Resonate servers...")
+26:     let servers = await ResonateClient.discoverServers()
+27:     if servers.isEmpty {
+28:         print("❌ No Resonate servers found on network")
+29:         print("💡 Usage: CLIPlayer [--no-tui] [ws://server:8927] [client-name]")
+30:         exit(1)
+31:     }
+32:     print("📡 Found \(servers.count) server(s):")
+33:     for (index, server) in servers.enumerated() {
+34:         print("  [\(index + 1)] \(server.name) - \(server.url)")
+35:     }
+36:     // Auto-select first server
+37:     let selected = servers[0]
+38:     print("✅ Connecting to: \(selected.name)")
+39:     serverURL = selected.url.absoluteString
+40: }
+41: let player = CLIPlayer()
+42: do {
+43:     try await player.run(serverURL: serverURL!, clientName: clientName, useTUI: enableTUI)
+44: } catch {
+45:     print("❌ Fatal error: \(error)")
+46:     exit(1)
+47: }
+</file>
+
+<file path="Sources/SimpleTest/main.swift">
+ 1: // ABOUTME: Simple non-interactive test client for ResonateKit
+ 2: // ABOUTME: Connects and runs for a specified duration without requiring user input
+ 3: import Foundation
+ 4: import ResonateKit
+ 5: @main
+ 6: struct SimpleTest {
+ 7:     static func main() async {
+ 8:         print("🎵 Simple ResonateKit Test")
+ 9:         print("━━━━━━━━━━━━━━━━━━━━━━━━")
+10:         let args = CommandLine.arguments
+11:         let serverURL = args.count > 1 ? args[1] : "ws://localhost:8927/resonate"
+12:         let duration = args.count > 2 ? Int(args[2]) ?? 30 : 30
+13:         guard let url = URL(string: serverURL) else {
+14:             print("❌ Invalid URL: \(serverURL)")
+15:             exit(1)
+16:         }
+17:         print("Connecting to: \(serverURL)")
+18:         print("Duration: \(duration) seconds")
+19:         print("")
+20:         // Create player configuration (PCM only)
+21:         let config = PlayerConfiguration(
+22:             bufferCapacity: 2_097_152,
+23:             supportedFormats: [
+24:                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+25:             ]
+26:         )
+27:         // Create client
+28:         let client = ResonateClient(
+29:             clientId: UUID().uuidString,
+30:             name: "Simple Test Client",
+31:             roles: [.player],
+32:             playerConfig: config
+33:         )
+34:         // Monitor events in background
+35:         Task {
+36:             for await event in client.events {
+37:                 switch event {
+38:                 case let .serverConnected(info):
+39:                     print("🔗 Connected to: \(info.name) (v\(info.version))")
+40:                 case let .streamStarted(format):
+41:                     let formatStr = "\(format.codec.rawValue) \(format.sampleRate)Hz \(format.channels)ch \(format.bitDepth)bit"
+42:                     print("▶️  Stream: \(formatStr)")
+43:                 case .streamEnded:
+44:                     print("⏹  Stream ended")
+45:                 case let .groupUpdated(info):
+46:                     if let state = info.playbackState {
+47:                         print("📻 Group \(info.groupName): \(state)")
+48:                     }
+49:                 case let .error(message):
+50:                     print("⚠️  Error: \(message)")
+51:                 default:
+52:                     break
+53:                 }
+54:             }
+55:         }
+56:         // Connect
+57:         do {
+58:             try await client.connect(to: url)
+59:             print("✅ Connected!")
+60:             print("")
+61:             // Run for specified duration
+62:             try await Task.sleep(for: .seconds(duration))
+63:             print("")
+64:             print("⏱️  Test duration complete")
+65:             await client.disconnect()
+66:             print("👋 Disconnected")
+67:         } catch {
+68:             print("❌ Error: \(error)")
+69:             exit(1)
+70:         }
+71:     }
+72: }
+</file>
+
+<file path=".gitignore">
+1: .DS_Store
+2: /.build
+3: /Packages
+4: xcuserdata/
+5: DerivedData/
+6: .swiftpm/configuration/registries.json
+7: .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+8: .netrc
+</file>
+
+<file path="code-review.md">
+  1: # Code Review: Resonate CLI Player
+  2: 
+  3: ## Overview
+  4: This is a Swift package implementing CLI players for the Resonate Protocol audio streaming system. The codebase includes three executable targets: a CLI player with TUI interface, an audio test utility, and a simple test client. The code demonstrates proper usage of the `ResonateKit` framework for synchronized multi-room audio playback.
+  5: 
+  6: ## Architecture Assessment
+  7: The codebase follows good Swift practices with proper separation of concerns:
+  8: - **CLIPlayer**: Main interactive player with TUI
+  9: - **AudioTest**: Simple PCM audio playback test
+ 10: - **SimpleTest**: Non-interactive connection test
+ 11: 
+ 12: ## Detailed Review
+ 13: 
+ 14: ### Package.swift
+ 15: **Lines 1-31**
+ 16: 
+ 17: ✅ **Strengths:**
+ 18: - Clean package definition with appropriate Swift 6.0 tools version
+ 19: - Proper platform targeting (macOS 14+)
+ 20: - Good separation of executable targets
+ 21: - Local dependency reference is appropriate for examples
+ 22: 
+ 23: ### CLIPlayer/main.swift
+ 24: **Lines 1-47**
+ 25: 
+ 26: ⚠️ **Issues:**
+ 27: - **Line 6**: Using top-level async code without `@main` struct - this works but is less conventional for Swift 6.0
+ 28: - **Lines 24-40**: Discovery logic mixed with argument parsing creates complex flow
+ 29: - **Line 43**: Force unwrapping `serverURL!` without additional safety check
+ 30: 
+ 31: ✅ **Strengths:**
+ 32: - Clean argument parsing logic
+ 33: - Good user feedback during discovery
+ 34: - Proper error handling with exit codes
+ 35: 
+ 36: **Recommendations:**
+ 37: ```swift
+ 38: // Consider wrapping in @main struct for better Swift 6 compliance
+ 39: @main
+ 40: struct CLIPlayerMain {
+ 41:     static func main() async {
+ 42:         // ... existing code
+ 43:     }
+ 44: }
+ 45: ```
+ 46: 
+ 47: ### CLIPlayer/CLIPlayer.swift
+ 48: **Lines 1-371**
+ 49: 
+ 50: #### Core Player Logic (Lines 6-181)
+ 51: 
+ 52: ✅ **Strengths:**
+ 53: - Well-structured class with proper task management
+ 54: - Good separation between TUI and non-TUI modes
+ 55: - Proper cleanup in `deinit`
+ 56: - Comprehensive audio format support (lines 26-36)
+ 57: 
+ 58: ⚠️ **Potential Issues:**
+ 59: - **Lines 47-53**: Multiple concurrent tasks created without explicit coordination
+ 60: - **Line 62**: `Task.detached` usage breaks actor isolation - could cause race conditions
+ 61: - **Lines 138-143**: `monitorStats` function is essentially empty but still runs
+ 62: - **Line 177**: Weak capture in Task might not prevent retain cycles as intended
+ 63: 
+ 64: **Critical Issue - Line 62-64:**
+ 65: ```swift
+ 66: let commandTask = Task.detached { [display] in
+ 67:     await CLIPlayer.runCommandLoopStatic(client: client, display: display)
+ 68: }
+ 69: ```
+ 70: This breaks MainActor isolation and could cause data races when accessing `client` from different contexts.
+ 71: 
+ 72: #### Event Handling (Lines 78-135)
+ 73: 
+ 74: ✅ **Strengths:**
+ 75: - Comprehensive event handling
+ 76: - Good separation between TUI and logging modes
+ 77: - Proper async iteration over event stream
+ 78: 
+ 79: ⚠️ **Minor Issues:**
+ 80: - **Lines 103-105**: Inconsistent event logging (some events only log in non-TUI mode)
+ 81: - **Lines 121-128**: Artwork and visualizer events logged but not used
+ 82: 
+ 83: #### StatusDisplay Actor (Lines 209-371)
+ 84: 
+ 85: ✅ **Strengths:**
+ 86: - Proper use of `actor` for thread-safe state management
+ 87: - Rich terminal UI with ANSI escape codes
+ 88: - Good visual feedback with colors and progress bars
+ 89: - Comprehensive status information display
+ 90: 
+ 91: ⚠️ **Issues:**
+ 92: - **Lines 237-242**: Busy loop with 100ms sleep - could be more efficient
+ 93: - **Line 236**: `fflush(stdout)` called from within actor - potential concurrency issue
+ 94: - **Lines 283-332**: Very long render function could benefit from decomposition
+ 95: 
+ 96: **Performance Concern:**
+ 97: The display updates every 100ms regardless of whether data has changed, which is inefficient.
+ 98: 
+ 99: ### AudioTest/main.swift
+100: **Lines 1-58**
+101: 
+102: ✅ **Strengths:**
+103: - Good demonstration of direct PCM playback
+104: - Proper chunking strategy
+105: - Clear error handling and user feedback
+106: - Appropriate use of `@main`
+107: 
+108: ⚠️ **Issues:**
+109: - **Line 11**: Hardcoded file path "sample-3s.pcm" - should be configurable
+110: - **Line 50**: Fixed 10ms delay might not be optimal for all systems
+111: - **Line 54**: Magic number "4" seconds for wait time
+112: 
+113: **Suggestion:**
+114: ```swift
+115: // Make file path configurable
+116: let filePath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "sample-3s.pcm"
+117: let fileURL = URL(fileURLWithPath: filePath)
+118: ```
+119: 
+120: ### SimpleTest/main.swift
+121: **Lines 1-72**
+122: 
+123: ✅ **Strengths:**
+124: - Clean, focused implementation
+125: - Good command-line argument handling
+126: - Proper async/await usage
+127: - Comprehensive event monitoring
+128: 
+129: ⚠️ **Minor Issues:**
+130: - **Line 24**: Single format support might be too limiting for testing
+131: - **Lines 51-52**: Some events ignored with `default: break`
+132: 
+133: ## Security Considerations
+134: 
+135: 1. **Line 11 (AudioTest)**: File path input is not validated - could lead to path traversal
+136: 2. **WebSocket URLs**: No validation of server certificates in examples
+137: 3. **Command input**: Basic input parsing without sanitization
+138: 
+139: ## Performance Considerations
+140: 
+141: 1. **Buffer sizes**: 2MB buffer (line 19 CLIPlayer, line 22 SimpleTest) seems reasonable but not configurable
+142: 2. **Display updates**: 100ms refresh rate might be excessive
+143: 3. **Task spawning**: Multiple concurrent tasks without resource limits
+144: 
+145: ## Code Quality Issues
+146: 
+147: ### High Priority
+148: - Fix MainActor isolation violation in CLIPlayer (line 62)
+149: - Remove or implement `monitorStats` function
+150: - Add proper error handling for force unwrap (CLIPlayer/main.swift line 43)
+151: 
+152: ### Medium Priority
+153: - Make file paths configurable in AudioTest
+154: - Decompose large render function in StatusDisplay
+155: - Add input validation for file operations
+156: 
+157: ### Low Priority
+158: - Consider using more structured argument parsing
+159: - Add configuration file support
+160: - Improve code documentation
+161: 
+162: ## Recommendations
+163: 
+164: 1. **Immediate fixes needed:**
+165:    ```swift
+166:    // Fix MainActor isolation
+167:    private func runCommandLoop(client: ResonateClient) async {
+168:        // Move back to MainActor context instead of Task.detached
+169:    }
+170:    ```
+171: 
+172: 2. **Architecture improvements:**
+173:    - Consider using Combine or AsyncStream for display updates instead of polling
+174:    - Implement proper configuration management
+175:    - Add structured logging
+176: 
+177: 3. **Testing considerations:**
+178:    - The examples lack error injection testing
+179:    - Network failure scenarios not well handled
+180:    - Audio format negotiation edge cases not covered
+181: 
+182: ## Overall Assessment
+183: 
+184: This is a well-structured example demonstrating ResonateKit usage with good separation of concerns and proper Swift concurrency usage in most areas. The main issues are around MainActor isolation violations and some performance inefficiencies in the display system. The code serves its purpose as an example but would need hardening for production use.
+185: 
+186: **Rating: B+** - Good example code with some concurrency safety issues that need addressing.
+</file>
+
+<file path="Package.resolved">
+ 1: {
+ 2:   "originHash" : "fa9c6496a6f5fbccea7a7ad3c8cdd5d6cae9ac1a1e88bb74198b8d83beec2780",
+ 3:   "pins" : [
+ 4:     {
+ 5:       "identity" : "starscream",
+ 6:       "kind" : "remoteSourceControl",
+ 7:       "location" : "https://github.com/daltoniam/Starscream.git",
+ 8:       "state" : {
+ 9:         "revision" : "c6bfd1af48efcc9a9ad203665db12375ba6b145a",
+10:         "version" : "4.0.8"
+11:       }
+12:     }
+13:   ],
+14:   "version" : 3
+15: }
+</file>
+
+<file path="Package.swift">
+ 1: // swift-tools-version: 6.0
+ 2: import PackageDescription
+ 3: let package = Package(
+ 4:     name: "CLIPlayer",
+ 5:     platforms: [
+ 6:         .macOS(.v14)
+ 7:     ],
+ 8:     dependencies: [
+ 9:         .package(path: "../..")
+10:     ],
+11:     targets: [
+12:         .executableTarget(
+13:             name: "CLIPlayer",
+14:             dependencies: [
+15:                 .product(name: "ResonateKit", package: "ResonateKit")
+16:             ]
+17:         ),
+18:         .executableTarget(
+19:             name: "AudioTest",
+20:             dependencies: [
+21:                 .product(name: "ResonateKit", package: "ResonateKit")
+22:             ]
+23:         ),
+24:         .executableTarget(
+25:             name: "SimpleTest",
+26:             dependencies: [
+27:                 .product(name: "ResonateKit", package: "ResonateKit")
+28:             ]
+29:         )
+30:     ]
+31: )
+</file>
+
+<file path="README.md">
+  1: # Resonate CLI Player
+  2: 
+  3: A simple command-line audio player demonstrating how to use ResonateKit to connect to a Resonate Protocol server and play synchronized audio.
+  4: 
+  5: ## Features
+  6: 
+  7: - Connects to Resonate server via WebSocket
+  8: - Supports PCM, Opus, and FLAC audio formats
+  9: - Real-time clock synchronization for multi-room audio
+ 10: - Interactive volume and mute controls
+ 11: - Event monitoring (connection, streams, groups)
+ 12: 
+ 13: ## Building
+ 14: 
+ 15: ```bash
+ 16: cd Examples/CLIPlayer
+ 17: swift build -c release
+ 18: ```
+ 19: 
+ 20: ## Usage
+ 21: 
+ 22: The CLI player supports both automatic discovery and manual connection:
+ 23: 
+ 24: ### Automatic Discovery (Recommended)
+ 25: 
+ 26: ```bash
+ 27: # Auto-discover servers on the network
+ 28: swift run CLIPlayer
+ 29: 
+ 30: # Auto-discover with custom client name
+ 31: swift run CLIPlayer "Living Room"
+ 32: ```
+ 33: 
+ 34: The player will:
+ 35: 1. Scan the network for Resonate servers via mDNS
+ 36: 2. Display all found servers
+ 37: 3. Automatically connect to the first server
+ 38: 
+ 39: ### Manual Connection
+ 40: 
+ 41: ```bash
+ 42: # Connect to specific server URL
+ 43: # Note: The /resonate path is automatically appended if not provided
+ 44: swift run CLIPlayer ws://192.168.1.100:8927
+ 45: 
+ 46: # Connect with explicit path
+ 47: swift run CLIPlayer ws://192.168.1.100:8927/resonate
+ 48: 
+ 49: # Connect with custom client name
+ 50: swift run CLIPlayer ws://192.168.1.100:8927 "Living Room"
+ 51: ```
+ 52: 
+ 53: ## Interactive Commands
+ 54: 
+ 55: Once connected, you can use these commands:
+ 56: 
+ 57: - `v <0-100>` - Set volume (e.g., `v 75` for 75%)
+ 58: - `m` - Mute audio
+ 59: - `u` - Unmute audio
+ 60: - `q` - Quit
+ 61: 
+ 62: ## Example Output
+ 63: 
+ 64: ### With Discovery
+ 65: 
+ 66: ```
+ 67: 🔍 Discovering Resonate servers...
+ 68: 📡 Found 2 server(s):
+ 69:   [1] Music Assistant - ws://192.168.1.100:8927
+ 70:   [2] Living Room Server - ws://192.168.1.105:8927
+ 71: ✅ Connecting to: Music Assistant
+ 72: 🎵 Resonate CLI Player
+ 73: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 74: 📡 Connecting to ws://192.168.1.100:8927...
+ 75: ✅ Connected! Listening for audio streams...
+ 76: 
+ 77: Commands:
+ 78:   v <0-100>  - Set volume
+ 79:   m          - Toggle mute
+ 80:   q          - Quit
+ 81: ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 82: 🔗 Connected to server: My Resonate Server (v1)
+ 83: 📻 Group: Living Room [playing]
+ 84: ▶️  Stream started:
+ 85:    Codec: flac
+ 86:    Sample rate: 44100 Hz
+ 87:    Channels: 2
+ 88:    Bit depth: 24 bits
+ 89: ```
+ 90: 
+ 91: ## Code Structure
+ 92: 
+ 93: The example demonstrates:
+ 94: 
+ 95: 1. **Client creation** - Configuring buffer size and supported formats
+ 96: 2. **Event handling** - Monitoring server events via AsyncStream
+ 97: 3. **Connection management** - Connecting, disconnecting, handling errors
+ 98: 4. **Playback control** - Volume and mute commands
+ 99: 5. **Interactive CLI** - Reading user input while maintaining event stream
+100: 
+101: ## Key ResonateKit APIs Used
+102: 
+103: ```swift
+104: // Discover servers on network
+105: let servers = await ResonateClient.discoverServers()
+106: // Returns: [DiscoveredServer(name: "Music Assistant", url: ws://..., ...)]
+107: 
+108: // Create player configuration
+109: let config = PlayerConfiguration(
+110:     bufferCapacity: 2_097_152,
+111:     supportedFormats: [...]
+112: )
+113: 
+114: // Create client
+115: let client = ResonateClient(
+116:     clientId: UUID().uuidString,
+117:     name: "My Player",
+118:     roles: [.player],
+119:     playerConfig: config
+120: )
+121: 
+122: // Connect to discovered server
+123: try await client.connect(to: servers[0].url)
+124: 
+125: // Monitor events
+126: for await event in client.events {
+127:     switch event {
+128:     case .serverConnected(let info): ...
+129:     case .streamStarted(let format): ...
+130:     // ...
+131:     }
+132: }
+133: 
+134: // Control playback
+135: await client.setVolume(0.75)
+136: await client.setMute(true)
+137: ```
+138: 
+139: ## Requirements
+140: 
+141: - macOS 14.0 or later
+142: - Swift 6.0 or later
+143: - A running Resonate Protocol server
+144: 
+145: ## Notes
+146: 
+147: This is a minimal example for demonstration purposes. A production player might add:
+148: 
+149: - Better error handling and recovery
+150: - Audio level meters / visualizers
+151: - Persistent client ID storage
+152: - Configuration file support
+153: - More sophisticated command parsing
+</file>
+
+</files>
