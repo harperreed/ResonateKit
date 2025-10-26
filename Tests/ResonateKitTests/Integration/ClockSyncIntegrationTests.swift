@@ -84,15 +84,15 @@ struct ClockSyncIntegrationTests {
             (2000, 2100, 2105, 2205), // Normal: ~50us offset
             (3000, 5000, 5005, 8005), // Extreme jitter: 2000us each way
             (4000, 4100, 4105, 4205), // Normal: ~50us offset
-            (5000, 5100, 5105, 5205), // Normal: ~50us offset
+            (5000, 5100, 5105, 5205) // Normal: ~50us offset
         ]
 
-        for (ct, sr, st, cr) in samples {
+        for (clientTransmitted, serverReceived, serverTransmitted, clientReceived) in samples {
             await sync.processServerTime(
-                clientTransmitted: ct,
-                serverReceived: sr,
-                serverTransmitted: st,
-                clientReceived: cr
+                clientTransmitted: clientTransmitted,
+                serverReceived: serverReceived,
+                serverTransmitted: serverTransmitted,
+                clientReceived: clientReceived
             )
         }
 

@@ -24,7 +24,7 @@ struct MessageRoundTripTests {
                 supportFormats: [
                     AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
                     AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44100, bitDepth: 24),
-                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
                 ],
                 bufferCapacity: 1_048_576,
                 supportedCommands: [.volume, .mute]
@@ -114,15 +114,8 @@ struct MessageRoundTripTests {
         #expect(decodedHeader == codecHeaderData)
     }
 
-    @Test("Multiple message types in sequence")
-    func messageSequence() throws {
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-
-        // 1. ClientHello
+    // Helper function to verify ClientHello message encoding/decoding
+    private func verifyClientHello(encoder: JSONEncoder, decoder: JSONDecoder) throws {
         let helloMessage = ClientHelloMessage(
             payload: ClientHelloPayload(
                 clientId: "client-1",
@@ -132,7 +125,7 @@ struct MessageRoundTripTests {
                 supportedRoles: [.player],
                 playerSupport: PlayerSupport(
                     supportFormats: [
-                        AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                        AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
                     ],
                     bufferCapacity: 512_000,
                     supportedCommands: []
@@ -145,9 +138,11 @@ struct MessageRoundTripTests {
         let helloData = try encoder.encode(helloMessage)
         let helloDecoded = try decoder.decode(ClientHelloMessage.self, from: helloData)
         #expect(helloDecoded.payload.clientId == "client-1")
+    }
 
-        // 2. ServerHello response
-        let serverHelloData = """
+    // Helper function to verify ServerHello message decoding
+    private func verifyServerHello(decoder: JSONDecoder) throws {
+        let serverHelloData = Data("""
         {
             "type": "server/hello",
             "payload": {
@@ -156,12 +151,14 @@ struct MessageRoundTripTests {
                 "version": 1
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let serverHello = try decoder.decode(ServerHelloMessage.self, from: serverHelloData)
         #expect(serverHello.payload.serverId == "server-1")
+    }
 
-        // 3. ClientTime
+    // Helper function to verify ClientTime message encoding/decoding
+    private func verifyClientTime(encoder: JSONEncoder, decoder: JSONDecoder) throws {
         let timeMessage = ClientTimeMessage(
             payload: ClientTimePayload(clientTransmitted: 123_456_789)
         )
@@ -169,9 +166,11 @@ struct MessageRoundTripTests {
         let timeData = try encoder.encode(timeMessage)
         let timeDecoded = try decoder.decode(ClientTimeMessage.self, from: timeData)
         #expect(timeDecoded.payload.clientTransmitted == 123_456_789)
+    }
 
-        // 4. StreamStart
-        let streamData = """
+    // Helper function to verify StreamStart message decoding
+    private func verifyStreamStart(decoder: JSONDecoder) throws {
+        let streamData = Data("""
         {
             "type": "stream/start",
             "payload": {
@@ -183,10 +182,25 @@ struct MessageRoundTripTests {
                 }
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let streamStart = try decoder.decode(StreamStartMessage.self, from: streamData)
         #expect(streamStart.payload.player?.codec == "opus")
+    }
+
+    @Test("Multiple message types in sequence")
+    func messageSequence() throws {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        // Verify each message type in sequence
+        try verifyClientHello(encoder: encoder, decoder: decoder)
+        try verifyServerHello(decoder: decoder)
+        try verifyClientTime(encoder: encoder, decoder: decoder)
+        try verifyStreamStart(decoder: decoder)
 
         // All messages decoded successfully in sequence
     }
@@ -194,7 +208,7 @@ struct MessageRoundTripTests {
     @Test("GroupUpdate with null fields")
     func groupUpdateWithNulls() throws {
         // Test partial updates with null fields (common in delta updates)
-        let jsonWithNulls = """
+        let jsonWithNulls = Data("""
         {
             "type": "group/update",
             "payload": {
@@ -203,7 +217,7 @@ struct MessageRoundTripTests {
                 "group_name": null
             }
         }
-        """.data(using: .utf8)!
+        """.utf8)
 
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase

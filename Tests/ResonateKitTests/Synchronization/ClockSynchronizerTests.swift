@@ -9,7 +9,8 @@ struct ClockSynchronizerTests {
 
         // Simulate NTP exchange where server clock is 100 microseconds ahead
         let clientTx: Int64 = 1000
-        let serverRx: Int64 = 1150 // Client sent at 1000, server clock reads 1150 (server ahead by 100, plus 50 network delay)
+        // Client sent at 1000, server clock reads 1150 (server ahead by 100, plus 50 network delay)
+        let serverRx: Int64 = 1150
         let serverTx: Int64 = 1155 // +5 processing
         let clientRx: Int64 = 1205 // Client receives at 1205 (50 network delay back)
 
@@ -38,10 +39,22 @@ struct ClockSynchronizerTests {
 
         // Add samples where server is consistently ahead by ~100, with one outlier
         // Each sample: server ahead by 100, symmetric 50us delays
-        await sync.processServerTime(clientTransmitted: 1000, serverReceived: 1150, serverTransmitted: 1155, clientReceived: 1205) // offset = 50
-        await sync.processServerTime(clientTransmitted: 2000, serverReceived: 2150, serverTransmitted: 2155, clientReceived: 2205) // offset = 50
-        await sync.processServerTime(clientTransmitted: 3000, serverReceived: 3600, serverTransmitted: 3605, clientReceived: 3705) // offset = 250 (outlier - high jitter)
-        await sync.processServerTime(clientTransmitted: 4000, serverReceived: 4150, serverTransmitted: 4155, clientReceived: 4205) // offset = 50
+        // offset = 50
+        await sync.processServerTime(
+            clientTransmitted: 1000, serverReceived: 1150, serverTransmitted: 1155, clientReceived: 1205
+        )
+        // offset = 50
+        await sync.processServerTime(
+            clientTransmitted: 2000, serverReceived: 2150, serverTransmitted: 2155, clientReceived: 2205
+        )
+        // offset = 250 (outlier - high jitter)
+        await sync.processServerTime(
+            clientTransmitted: 3000, serverReceived: 3600, serverTransmitted: 3605, clientReceived: 3705
+        )
+        // offset = 50
+        await sync.processServerTime(
+            clientTransmitted: 4000, serverReceived: 4150, serverTransmitted: 4155, clientReceived: 4205
+        )
 
         let offset = await sync.currentOffset
 

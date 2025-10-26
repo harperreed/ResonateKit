@@ -54,10 +54,10 @@ struct BufferManagerIntegrationTests {
         let chunkSize = 3000
         var bufferedCount = 0
 
-        for i in 0 ..< 10 {
+        for chunkIndex in 0 ..< 10 {
             if await manager.hasCapacity(chunkSize) {
                 await manager.register(
-                    endTimeMicros: Int64((i + 1) * 10000),
+                    endTimeMicros: Int64((chunkIndex + 1) * 10000),
                     byteCount: chunkSize
                 )
                 bufferedCount += 1
