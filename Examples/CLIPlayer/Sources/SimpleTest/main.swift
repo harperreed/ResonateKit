@@ -46,7 +46,8 @@ struct SimpleTest {
                 case let .serverConnected(info):
                     print("🔗 Connected to: \(info.name) (v\(info.version))")
                 case let .streamStarted(format):
-                    print("▶️  Stream: \(format.codec.rawValue) \(format.sampleRate)Hz \(format.channels)ch \(format.bitDepth)bit")
+                    let formatStr = "\(format.codec.rawValue) \(format.sampleRate)Hz \(format.channels)ch \(format.bitDepth)bit"
+                    print("▶️  Stream: \(formatStr)")
                 case .streamEnded:
                     print("⏹  Stream ended")
                 case let .groupUpdated(info):

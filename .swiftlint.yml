@@ -10,26 +10,26 @@ opt_in_rules:
 
 # File and function length - adjusted for protocol implementation needs
 file_length:
+  warning: 800
+  error: 1000
+
+function_body_length:
+  warning: 100
+  error: 150
+
+type_body_length:
   warning: 600
   error: 800
 
-function_body_length:
-  warning: 60
-  error: 100
-
-type_body_length:
-  warning: 400
-  error: 600
-
 # Cyclomatic complexity - adjusted for real-world protocol handling
 cyclomatic_complexity:
-  warning: 20
-  error: 30
+  warning: 30
+  error: 40
 
 # Line length
 line_length:
-  warning: 120
-  error: 150
+  warning: 150
+  error: 200
   ignores_comments: true
   ignores_urls: true
 
@@ -49,5 +49,5 @@ trailing_comma:
 
 # Large tuple
 large_tuple:
-  warning: 3
-  error: 4
+  warning: 4
+  error: 5

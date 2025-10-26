@@ -437,8 +437,7 @@ public final class ResonateClient {
         // Extract message type for logging
         var msgType = "unknown"
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let type = json["type"] as? String
-        {
+           let type = json["type"] as? String {
             msgType = type
             fputs("[RX] \(msgType)\n", stderr)
         }
@@ -610,8 +609,7 @@ public final class ResonateClient {
 
     private func handleGroupUpdate(_ message: GroupUpdateMessage) async {
         if let groupId = message.payload.groupId,
-           let groupName = message.payload.groupName
-        {
+           let groupName = message.payload.groupName {
             let info = GroupInfo(
                 groupId: groupId,
                 groupName: groupName,
