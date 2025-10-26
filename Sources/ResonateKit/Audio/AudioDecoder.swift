@@ -3,6 +3,7 @@
 
 @preconcurrency import AVFoundation
 import Foundation
+import Opus
 
 /// Audio decoder protocol
 public protocol AudioDecoder {
@@ -64,82 +65,75 @@ public class PCMDecoder: AudioDecoder {
     }
 }
 
-/// Opus decoder using AVAudioConverter
+/// Opus decoder using libopus via swift-opus package
 public class OpusDecoder: AudioDecoder {
-    private let converter: AVAudioConverter
-    private let inputFormat: AVAudioFormat
-    private let outputFormat: AVAudioFormat
+    private let decoder: Opus.Decoder
+    private let channels: Int
 
     public init(sampleRate: Int, channels: Int, bitDepth: Int) throws {
-        // Input format: Opus compressed audio
-        guard let opusFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,  // Opus decodes to int16 internally
+        self.channels = channels
+
+        // Create AVAudioFormat for Opus decoder
+        // swift-opus accepts standard PCM formats and handles Opus internally
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
             sampleRate: Double(sampleRate),
             channels: AVAudioChannelCount(channels),
             interleaved: true
         ) else {
-            throw AudioDecoderError.formatCreationFailed("Opus input format")
+            throw AudioDecoderError.formatCreationFailed("Failed to create audio format for Opus")
         }
 
-        // Output format: PCM int32 (normalized output)
-        // For 16-bit and 24-bit, we normalize to int32 for consistency
-        guard let pcmFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt32,
-            sampleRate: Double(sampleRate),
-            channels: AVAudioChannelCount(channels),
-            interleaved: true
-        ) else {
-            throw AudioDecoderError.formatCreationFailed("PCM output format")
+        // Create opus decoder (validates sample rate internally)
+        do {
+            self.decoder = try Opus.Decoder(format: format)
+        } catch {
+            throw AudioDecoderError.formatCreationFailed("Opus decoder: \(error.localizedDescription)")
         }
-
-        guard let audioConverter = AVAudioConverter(from: opusFormat, to: pcmFormat) else {
-            throw AudioDecoderError.converterCreationFailed
-        }
-
-        self.inputFormat = opusFormat
-        self.outputFormat = pcmFormat
-        self.converter = audioConverter
     }
 
     public func decode(_ data: Data) throws -> Data {
-        // Create input buffer from Opus frame data
-        let bytesPerFrame = Int(inputFormat.streamDescription.pointee.mBytesPerFrame)
-        let frameLength = AVAudioFrameCount(data.count / bytesPerFrame)
-        guard let inputBuffer = AVAudioPCMBuffer(pcmFormat: inputFormat, frameCapacity: frameLength) else {
-            throw AudioDecoderError.bufferCreationFailed
-        }
-        inputBuffer.frameLength = frameLength
-
-        // Copy Opus data to buffer
-        data.withUnsafeBytes { srcBytes in
-            guard let src = srcBytes.baseAddress else { return }
-            memcpy(inputBuffer.audioBufferList.pointee.mBuffers.mData, src, data.count)
+        // Decode Opus packet to AVAudioPCMBuffer
+        let pcmBuffer: AVAudioPCMBuffer
+        do {
+            pcmBuffer = try decoder.decode(data)
+        } catch {
+            throw AudioDecoderError.conversionFailed("Opus decode failed: \(error.localizedDescription)")
         }
 
-        // Create output buffer (decoded PCM)
-        // Opus typically expands ~10x, so allocate conservatively
-        let outputFrameCapacity = frameLength * 10
-        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: outputFrameCapacity) else {
-            throw AudioDecoderError.bufferCreationFailed
+        // swift-opus outputs float32 in AVAudioPCMBuffer
+        // Convert float32 → int32 (24-bit left-justified format)
+        guard let floatChannelData = pcmBuffer.floatChannelData else {
+            throw AudioDecoderError.conversionFailed("No float channel data in decoded buffer")
         }
 
-        // Convert Opus → PCM
-        var error: NSError?
-        let inputBlock: AVAudioConverterInputBlock = { _, outStatus in
-            outStatus.pointee = .haveData
-            return inputBuffer
+        let frameLength = Int(pcmBuffer.frameLength)
+        let totalSamples = frameLength * channels
+        var int32Samples = [Int32](repeating: 0, count: totalSamples)
+
+        // Convert interleaved float32 samples to int32
+        // float range [-1.0, 1.0] → int32 range [Int32.min, Int32.max]
+        if channels == 1 {
+            // Mono: direct conversion
+            let floatData = floatChannelData[0]
+            for i in 0..<frameLength {
+                let floatSample = floatData[i]
+                int32Samples[i] = Int32(floatSample * Float(Int32.max))
+            }
+        } else {
+            // Stereo or multi-channel: interleave
+            for channel in 0..<channels {
+                let floatData = floatChannelData[channel]
+                for frame in 0..<frameLength {
+                    let floatSample = floatData[frame]
+                    let sampleIndex = frame * channels + channel
+                    int32Samples[sampleIndex] = Int32(floatSample * Float(Int32.max))
+                }
+            }
         }
 
-        converter.convert(to: outputBuffer, error: &error, withInputFrom: inputBlock)
-
-        if let error = error {
-            throw AudioDecoderError.conversionFailed(error.localizedDescription)
-        }
-
-        // Extract PCM data from output buffer
-        let outputData = Data(bytes: outputBuffer.audioBufferList.pointee.mBuffers.mData!,
-                              count: Int(outputBuffer.audioBufferList.pointee.mBuffers.mDataByteSize))
-        return outputData
+        // Convert [Int32] to Data
+        return int32Samples.withUnsafeBytes { Data($0) }
     }
 }
 
