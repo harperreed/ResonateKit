@@ -58,6 +58,8 @@ public actor ServerDiscovery {
 
     private func handleStateChange(_ state: NWBrowser.State) {
         switch state {
+        case .setup:
+            break
         case .ready:
             break
         case let .failed(error):
