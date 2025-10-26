@@ -24,7 +24,7 @@ struct MessageRoundTripTests {
                 supportFormats: [
                     AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
                     AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44100, bitDepth: 24),
-                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
                 ],
                 bufferCapacity: 1_048_576,
                 supportedCommands: [.volume, .mute]
@@ -125,7 +125,7 @@ struct MessageRoundTripTests {
                 supportedRoles: [.player],
                 playerSupport: PlayerSupport(
                     supportFormats: [
-                        AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                        AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
                     ],
                     bufferCapacity: 512_000,
                     supportedCommands: []
