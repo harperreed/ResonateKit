@@ -47,7 +47,7 @@ struct AudioTest {
         while offset < audioData.count {
             let remainingBytes = audioData.count - offset
             let bytesToRead = min(chunkSize, remainingBytes)
-            let chunk = audioData.subdata(in: offset..<(offset + bytesToRead))
+            let chunk = audioData.subdata(in: offset ..< (offset + bytesToRead))
 
             // Use new direct PCM playback method
             try await audioPlayer.playPCM(chunk)

@@ -43,17 +43,17 @@ struct SimpleTest {
         Task {
             for await event in client.events {
                 switch event {
-                case .serverConnected(let info):
+                case let .serverConnected(info):
                     print("🔗 Connected to: \(info.name) (v\(info.version))")
-                case .streamStarted(let format):
+                case let .streamStarted(format):
                     print("▶️  Stream: \(format.codec.rawValue) \(format.sampleRate)Hz \(format.channels)ch \(format.bitDepth)bit")
                 case .streamEnded:
                     print("⏹  Stream ended")
-                case .groupUpdated(let info):
+                case let .groupUpdated(info):
                     if let state = info.playbackState {
                         print("📻 Group \(info.groupName): \(state)")
                     }
-                case .error(let message):
+                case let .error(message):
                     print("⚠️  Error: \(message)")
                 default:
                     break

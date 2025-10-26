@@ -1,15 +1,14 @@
 // ABOUTME: Integration tests for full message encoding/decoding round trips
 // ABOUTME: Tests that messages can be encoded to JSON, decoded back, and maintain data integrity
 
-import Testing
-@testable import ResonateKit
 import Foundation
+@testable import ResonateKit
+import Testing
 
 @Suite("Message Round Trip Integration Tests")
 struct MessageRoundTripTests {
-
     @Test("ClientHello round trip maintains all data")
-    func testClientHelloRoundTrip() throws {
+    func clientHelloRoundTrip() throws {
         // Create complete ClientHello with all fields populated
         let originalPayload = ClientHelloPayload(
             clientId: "test-client-123",
@@ -25,7 +24,7 @@ struct MessageRoundTripTests {
                 supportFormats: [
                     AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
                     AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44100, bitDepth: 24),
-                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
                 ],
                 bufferCapacity: 1_048_576,
                 supportedCommands: [.volume, .mute]
@@ -74,8 +73,8 @@ struct MessageRoundTripTests {
     }
 
     @Test("StreamStart round trip with codec header")
-    func testStreamStartRoundTrip() throws {
-        let codecHeaderData = Data([0x66, 0x4C, 0x61, 0x43])  // "fLaC" FLAC signature
+    func streamStartRoundTrip() throws {
+        let codecHeaderData = Data([0x66, 0x4C, 0x61, 0x43]) // "fLaC" FLAC signature
         let codecHeaderB64 = codecHeaderData.base64EncodedString()
 
         let originalPayload = StreamStartPayload(
@@ -116,7 +115,7 @@ struct MessageRoundTripTests {
     }
 
     @Test("Multiple message types in sequence")
-    func testMessageSequence() throws {
+    func messageSequence() throws {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
 
@@ -133,9 +132,9 @@ struct MessageRoundTripTests {
                 supportedRoles: [.player],
                 playerSupport: PlayerSupport(
                     supportFormats: [
-                        AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                        AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
                     ],
-                    bufferCapacity: 512000,
+                    bufferCapacity: 512_000,
                     supportedCommands: []
                 ),
                 artworkSupport: nil,
@@ -164,12 +163,12 @@ struct MessageRoundTripTests {
 
         // 3. ClientTime
         let timeMessage = ClientTimeMessage(
-            payload: ClientTimePayload(clientTransmitted: 123456789)
+            payload: ClientTimePayload(clientTransmitted: 123_456_789)
         )
 
         let timeData = try encoder.encode(timeMessage)
         let timeDecoded = try decoder.decode(ClientTimeMessage.self, from: timeData)
-        #expect(timeDecoded.payload.clientTransmitted == 123456789)
+        #expect(timeDecoded.payload.clientTransmitted == 123_456_789)
 
         // 4. StreamStart
         let streamData = """
@@ -193,7 +192,7 @@ struct MessageRoundTripTests {
     }
 
     @Test("GroupUpdate with null fields")
-    func testGroupUpdateWithNulls() throws {
+    func groupUpdateWithNulls() throws {
         // Test partial updates with null fields (common in delta updates)
         let jsonWithNulls = """
         {

@@ -22,7 +22,7 @@ public actor BufferManager {
     /// Register a chunk added to the buffer
     public func register(endTimeMicros: Int64, byteCount: Int) {
         guard endTimeMicros >= 0, byteCount >= 0 else {
-            return  // Silently ignore invalid chunks
+            return // Silently ignore invalid chunks
         }
 
         bufferedChunks.append((endTimeMicros, byteCount))

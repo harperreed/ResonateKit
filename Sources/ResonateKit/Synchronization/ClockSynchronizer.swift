@@ -13,24 +13,24 @@ public enum SyncQuality: Sendable {
 /// Synchronizes local clock with server clock using drift compensation
 public actor ClockSynchronizer: ClockSyncProtocol {
     // Clock synchronization state
-    private var offset: Int64 = 0           // Current offset in microseconds (server - client)
-    private var drift: Double = 0.0         // Clock drift rate (dimensionless: μs/μs)
-    private var rawOffset: Int64 = 0        // Latest raw offset measurement
-    private var rtt: Int64 = 0              // Latest round-trip time
+    private var offset: Int64 = 0 // Current offset in microseconds (server - client)
+    private var drift: Double = 0.0 // Clock drift rate (dimensionless: μs/μs)
+    private var rawOffset: Int64 = 0 // Latest raw offset measurement
+    private var rtt: Int64 = 0 // Latest round-trip time
     private var quality: SyncQuality = .lost
     private var lastSyncTime: Date?
-    private var lastSyncMicros: Int64 = 0   // Client time (μs) when offset/drift were last updated
+    private var lastSyncMicros: Int64 = 0 // Client time (μs) when offset/drift were last updated
     private var sampleCount: Int = 0
     private let smoothingRate: Double = 0.1 // 10% weight to new samples (Kalman gain)
 
     // Server loop origin tracking (when server's loop.time() == 0 in client's time domain)
     // This anchors the process-relative time domain to absolute time
-    private let clientProcessStartAbsolute: Int64  // Absolute Unix epoch μs when client process started
-    private var serverLoopOriginAbsolute: Int64 = 0  // Absolute Unix epoch μs when server loop started
+    private let clientProcessStartAbsolute: Int64 // Absolute Unix epoch μs when client process started
+    private var serverLoopOriginAbsolute: Int64 = 0 // Absolute Unix epoch μs when server loop started
 
     public init() {
         // Record absolute time when synchronizer is created (proxy for process start)
-        self.clientProcessStartAbsolute = Int64(Date().timeIntervalSince1970 * 1_000_000)
+        clientProcessStartAbsolute = Int64(Date().timeIntervalSince1970 * 1_000_000)
     }
 
     /// Current clock offset in microseconds
@@ -56,10 +56,10 @@ public actor ClockSynchronizer: ClockSyncProtocol {
 
     /// Process server time message to update offset and drift
     public func processServerTime(
-        clientTransmitted: Int64,     // t1
-        serverReceived: Int64,        // t2
-        serverTransmitted: Int64,     // t3
-        clientReceived: Int64         // t4
+        clientTransmitted: Int64, // t1
+        serverReceived: Int64, // t2
+        serverTransmitted: Int64, // t3
+        clientReceived: Int64 // t4
     ) {
         // Calculate RTT and measured offset
         let (calculatedRtt, measuredOffset) = calculateOffset(
@@ -69,25 +69,25 @@ public actor ClockSynchronizer: ClockSyncProtocol {
             t4: clientReceived
         )
 
-        self.rtt = calculatedRtt
-        self.rawOffset = measuredOffset
-        self.lastSyncTime = Date()
+        rtt = calculatedRtt
+        rawOffset = measuredOffset
+        lastSyncTime = Date()
 
         // Debug logging for first few syncs
         if sampleCount < 3 {
-            print("[SYNC] Raw timestamps: t1=\(clientTransmitted), t2=\(serverReceived), t3=\(serverTransmitted), t4=\(clientReceived)")
-            print("[SYNC] Calculated: rtt=\(calculatedRtt)μs, measured_offset=\(measuredOffset)μs")
+            // print("[SYNC] Raw timestamps: t1=\(clientTransmitted), t2=\(serverReceived), t3=\(serverTransmitted), t4=\(clientReceived)")
+            // print("[SYNC] Calculated: rtt=\(calculatedRtt)μs, measured_offset=\(measuredOffset)μs")
         }
 
         // Discard samples with negative RTT (timestamp issues)
         if calculatedRtt < 0 {
-            print("[SYNC] Discarding sync sample: negative RTT \(calculatedRtt)μs (timestamp issue)")
+            // print("[SYNC] Discarding sync sample: negative RTT \(calculatedRtt)μs (timestamp issue)")
             return
         }
 
         // Discard samples with high RTT (network congestion)
         if calculatedRtt > 100_000 { // 100ms
-            print("[SYNC] Discarding sync sample: high RTT \(calculatedRtt)μs")
+            // print("[SYNC] Discarding sync sample: high RTT \(calculatedRtt)μs")
             return
         }
 
@@ -103,8 +103,8 @@ public actor ClockSynchronizer: ClockSyncProtocol {
 
             sampleCount += 1
             quality = .good
-            print("[SYNC] Initial sync: offset=\(offset)μs, rtt=\(calculatedRtt)μs")
-            print("[SYNC] Server loop origin: \(serverLoopOriginAbsolute)μs absolute (client process start: \(clientProcessStartAbsolute)μs)")
+            // print("[SYNC] Initial sync: offset=\(offset)μs, rtt=\(calculatedRtt)μs")
+            // print("[SYNC] Server loop origin: \(serverLoopOriginAbsolute)μs absolute (client process start: \(clientProcessStartAbsolute)μs)")
             return
         }
 
@@ -114,7 +114,7 @@ public actor ClockSynchronizer: ClockSyncProtocol {
             if dt > 0 {
                 // Drift = change in offset over time
                 drift = Double(measuredOffset - offset) / dt
-                print("[SYNC] Drift initialized: drift=\(String(format: "%.9f", drift)) μs/μs over Δt=\(Int(dt))μs")
+                // print("[SYNC] Drift initialized: drift=\(String(format: "%.9f", drift)) μs/μs over Δt=\(Int(dt))μs")
             }
             offset = measuredOffset
             lastSyncMicros = clientReceived
@@ -124,14 +124,14 @@ public actor ClockSynchronizer: ClockSyncProtocol {
 
             sampleCount += 1
             quality = .good
-            print("[SYNC] Second sync: offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), rtt=\(calculatedRtt)μs")
+            // print("[SYNC] Second sync: offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), rtt=\(calculatedRtt)μs")
             return
         }
 
         // Subsequent syncs: predict offset using drift, then update both
         let dt = Double(clientReceived - lastSyncMicros)
         if dt <= 0 {
-            print("[SYNC] Discarding sync sample: non-monotonic time")
+            // print("[SYNC] Discarding sync sample: non-monotonic time")
             return
         }
 
@@ -142,8 +142,8 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         let residual = measuredOffset - predictedOffset
 
         // Reject outliers (residual > 50ms suggests network issue or clock jump)
-        if abs(residual) > 50_000 {
-            print("[SYNC] Discarding sync sample: large residual \(residual)μs (possible clock jump)")
+        if abs(residual) > 50000 {
+            // print("[SYNC] Discarding sync sample: large residual \(residual)μs (possible clock jump)")
             return
         }
 
@@ -163,14 +163,14 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         serverLoopOriginAbsolute = clientProcessStartAbsolute - offset
 
         // Update quality based on RTT
-        if calculatedRtt < 50_000 { // <50ms
+        if calculatedRtt < 50000 { // <50ms
             quality = .good
         } else {
             quality = .degraded
         }
 
         if sampleCount < 10 {
-            print("[SYNC] Sync #\(sampleCount): offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), residual=\(residual)μs, rtt=\(calculatedRtt)μs")
+            // print("[SYNC] Sync #\(sampleCount): offset=\(offset)μs, drift=\(String(format: "%.9f", drift)), residual=\(residual)μs, rtt=\(calculatedRtt)μs")
         }
     }
 
@@ -241,6 +241,6 @@ public actor ClockSynchronizer: ClockSyncProtocol {
         lastSyncMicros = 0
         serverLoopOriginAbsolute = 0
         sampleCount = 0
-        print("[SYNC] Clock synchronization reset")
+        // print("[SYNC] Clock synchronization reset")
     }
 }

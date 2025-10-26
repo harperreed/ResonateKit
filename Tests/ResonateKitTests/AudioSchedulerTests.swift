@@ -1,5 +1,5 @@
-import XCTest
 @testable import ResonateKit
+import XCTest
 
 final class AudioSchedulerTests: XCTestCase {
     func testSchedulerAcceptsChunk() async throws {
@@ -8,7 +8,7 @@ final class AudioSchedulerTests: XCTestCase {
         let scheduler = AudioScheduler(clockSync: clockSync)
 
         let pcmData = Data(repeating: 0x00, count: 1024)
-        let serverTimestamp: Int64 = 1000000 // 1 second in microseconds
+        let serverTimestamp: Int64 = 1_000_000 // 1 second in microseconds
 
         // Should not throw
         await scheduler.schedule(pcm: pcmData, serverTimestamp: serverTimestamp)
@@ -112,7 +112,7 @@ final class AudioSchedulerTests: XCTestCase {
         let futureMicros = Int64(future.timeIntervalSince1970 * 1_000_000)
 
         // Schedule 10 chunks (exceeds limit of 5)
-        for i in 0..<10 {
+        for i in 0 ..< 10 {
             await scheduler.schedule(
                 pcm: Data([UInt8(i)]),
                 serverTimestamp: futureMicros + Int64(i * 1000)
@@ -202,7 +202,7 @@ final class AudioSchedulerTests: XCTestCase {
 
         // Check detailed stats
         let detailedStats = await scheduler.getDetailedStats()
-        XCTAssertEqual(detailedStats.queueSize, 0)  // Queue should be empty
+        XCTAssertEqual(detailedStats.queueSize, 0) // Queue should be empty
         XCTAssertEqual(detailedStats.received, 1)
         XCTAssertEqual(detailedStats.played, 1)
         XCTAssertEqual(detailedStats.dropped, 0)

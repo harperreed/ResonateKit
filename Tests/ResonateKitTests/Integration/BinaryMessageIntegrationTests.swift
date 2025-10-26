@@ -1,27 +1,26 @@
 // ABOUTME: Integration tests for binary message handling simulating real audio/artwork data
 // ABOUTME: Tests binary message creation, encoding, and decoding with realistic payloads
 
-import Testing
-@testable import ResonateKit
 import Foundation
+@testable import ResonateKit
+import Testing
 
 @Suite("Binary Message Integration Tests")
 struct BinaryMessageIntegrationTests {
-
     @Test("Audio chunk with real PCM data")
-    func testRealAudioChunk() throws {
+    func realAudioChunk() throws {
         // Simulate 1ms of 48kHz stereo 16-bit PCM audio
         let sampleRate = 48000
         let channels = 2
         let bytesPerSample = 2
-        let duration = 0.001  // 1 millisecond
+        let duration = 0.001 // 1 millisecond
 
         let sampleCount = Int(Double(sampleRate) * duration)
         let dataSize = sampleCount * channels * bytesPerSample
 
         // Generate simple sine wave test tone (440 Hz A note)
         var audioData = Data()
-        for i in 0..<sampleCount {
+        for i in 0 ..< sampleCount {
             let time = Double(i) / Double(sampleRate)
             let amplitude = sin(2.0 * .pi * 440.0 * time)
             let sample = Int16(amplitude * Double(Int16.max))
@@ -33,9 +32,9 @@ struct BinaryMessageIntegrationTests {
 
         // Create binary message
         var messageData = Data()
-        messageData.append(0)  // Audio chunk type
+        messageData.append(0) // Audio chunk type
 
-        let timestamp: Int64 = 1000000  // 1 second in microseconds
+        let timestamp: Int64 = 1_000_000 // 1 second in microseconds
         withUnsafeBytes(of: timestamp.bigEndian) { messageData.append(contentsOf: $0) }
 
         messageData.append(audioData)
@@ -44,19 +43,19 @@ struct BinaryMessageIntegrationTests {
         let message = try #require(BinaryMessage(data: messageData))
 
         #expect(message.type == .audioChunk)
-        #expect(message.timestamp == 1000000)
+        #expect(message.timestamp == 1_000_000)
         #expect(message.data.count == dataSize)
     }
 
     @Test("Multiple audio chunks in sequence")
-    func testAudioChunkSequence() throws {
-        let chunkDuration: Int64 = 25000  // 25ms in microseconds
+    func audioChunkSequence() throws {
+        let chunkDuration: Int64 = 25000 // 25ms in microseconds
         var chunks: [BinaryMessage] = []
 
         // Create 10 sequential chunks
-        for i in 0..<10 {
+        for i in 0 ..< 10 {
             var data = Data()
-            data.append(0)  // Audio chunk type
+            data.append(0) // Audio chunk type
 
             let timestamp = Int64(i) * chunkDuration
             withUnsafeBytes(of: timestamp.bigEndian) { data.append(contentsOf: $0) }
@@ -78,11 +77,11 @@ struct BinaryMessageIntegrationTests {
 
         // Verify time span
         let totalDuration = chunks.last!.timestamp - chunks.first!.timestamp
-        #expect(totalDuration == 9 * chunkDuration)  // 9 intervals between 10 chunks
+        #expect(totalDuration == 9 * chunkDuration) // 9 intervals between 10 chunks
     }
 
     @Test("Artwork JPEG with realistic image data")
-    func testArtworkJPEG() throws {
+    func artworkJPEG() throws {
         // Create realistic JPEG header + minimal data
         var jpegData = Data()
 
@@ -96,7 +95,7 @@ struct BinaryMessageIntegrationTests {
         jpegData.append(contentsOf: [0x00, 0x10])
 
         // JFIF identifier
-        jpegData.append(contentsOf: [0x4A, 0x46, 0x49, 0x46, 0x00])  // "JFIF\0"
+        jpegData.append(contentsOf: [0x4A, 0x46, 0x49, 0x46, 0x00]) // "JFIF\0"
 
         // Version 1.1
         jpegData.append(contentsOf: [0x01, 0x01])
@@ -112,9 +111,9 @@ struct BinaryMessageIntegrationTests {
 
         // Create artwork message for channel 0
         var messageData = Data()
-        messageData.append(4)  // Artwork channel 0
+        messageData.append(4) // Artwork channel 0
 
-        let timestamp: Int64 = 5000000  // 5 seconds
+        let timestamp: Int64 = 5_000_000 // 5 seconds
         withUnsafeBytes(of: timestamp.bigEndian) { messageData.append(contentsOf: $0) }
 
         messageData.append(jpegData)
@@ -123,7 +122,7 @@ struct BinaryMessageIntegrationTests {
         let message = try #require(BinaryMessage(data: messageData))
 
         #expect(message.type == .artworkChannel0)
-        #expect(message.timestamp == 5000000)
+        #expect(message.timestamp == 5_000_000)
         #expect(message.data.count == jpegData.count)
 
         // Verify JPEG header is intact
@@ -134,15 +133,15 @@ struct BinaryMessageIntegrationTests {
     }
 
     @Test("All artwork channels simultaneously")
-    func testMultipleArtworkChannels() throws {
+    func multipleArtworkChannels() throws {
         var channels: [BinaryMessage] = []
 
         // Create messages for all 4 artwork channels
-        for channelNum in 0..<4 {
+        for channelNum in 0 ..< 4 {
             var data = Data()
-            data.append(UInt8(4 + channelNum))  // Channels 4-7
+            data.append(UInt8(4 + channelNum)) // Channels 4-7
 
-            let timestamp: Int64 = 1000000
+            let timestamp: Int64 = 1_000_000
             withUnsafeBytes(of: timestamp.bigEndian) { data.append(contentsOf: $0) }
 
             // Different image data for each channel
@@ -161,17 +160,17 @@ struct BinaryMessageIntegrationTests {
 
         // All have same timestamp (simultaneous update)
         for channel in channels {
-            #expect(channel.timestamp == 1000000)
+            #expect(channel.timestamp == 1_000_000)
         }
     }
 
     @Test("Empty artwork message (clear artwork command)")
-    func testEmptyArtworkMessage() throws {
+    func emptyArtworkMessage() throws {
         // Per spec, empty artwork message clears the display
         var data = Data()
-        data.append(4)  // Artwork channel 0
+        data.append(4) // Artwork channel 0
 
-        let timestamp: Int64 = 2000000
+        let timestamp: Int64 = 2_000_000
         withUnsafeBytes(of: timestamp.bigEndian) { data.append(contentsOf: $0) }
 
         // No image data - just header
@@ -179,8 +178,8 @@ struct BinaryMessageIntegrationTests {
         let message = try #require(BinaryMessage(data: data))
 
         #expect(message.type == .artworkChannel0)
-        #expect(message.timestamp == 2000000)
-        #expect(message.data.isEmpty)  // Empty payload signals "clear"
+        #expect(message.timestamp == 2_000_000)
+        #expect(message.data.isEmpty) // Empty payload signals "clear"
     }
 
     @Test("Visualizer data with FFT spectrum")
@@ -189,7 +188,7 @@ struct BinaryMessageIntegrationTests {
         let binCount = 32
         var fftData = Data()
 
-        for i in 0..<binCount {
+        for i in 0 ..< binCount {
             // Simulate decreasing amplitude at higher frequencies
             let amplitude = Float(255 - (i * 8))
             withUnsafeBytes(of: amplitude) { fftData.append(contentsOf: $0) }
@@ -197,9 +196,9 @@ struct BinaryMessageIntegrationTests {
 
         // Create visualizer message
         var messageData = Data()
-        messageData.append(8)  // Visualizer data type
+        messageData.append(8) // Visualizer data type
 
-        let timestamp: Int64 = 3000000
+        let timestamp: Int64 = 3_000_000
         withUnsafeBytes(of: timestamp.bigEndian) { messageData.append(contentsOf: $0) }
 
         messageData.append(fftData)
@@ -208,20 +207,20 @@ struct BinaryMessageIntegrationTests {
         let message = try #require(BinaryMessage(data: messageData))
 
         #expect(message.type == .visualizerData)
-        #expect(message.timestamp == 3000000)
-        #expect(message.data.count == binCount * 4)  // 32 bins * 4 bytes per float
+        #expect(message.timestamp == 3_000_000)
+        #expect(message.data.count == binCount * 4) // 32 bins * 4 bytes per float
     }
 
     @Test("Large audio chunk near buffer limit")
-    func testLargeAudioChunk() throws {
+    func largeAudioChunk() throws {
         // Simulate large compressed audio chunk (100 KB Opus frame)
         let chunkSize = 100_000
         let audioData = Data(repeating: 0xAB, count: chunkSize)
 
         var messageData = Data()
-        messageData.append(0)  // Audio chunk
+        messageData.append(0) // Audio chunk
 
-        let timestamp: Int64 = 10000000
+        let timestamp: Int64 = 10_000_000
         withUnsafeBytes(of: timestamp.bigEndian) { messageData.append(contentsOf: $0) }
 
         messageData.append(audioData)
@@ -230,6 +229,6 @@ struct BinaryMessageIntegrationTests {
 
         #expect(message.type == .audioChunk)
         #expect(message.data.count == chunkSize)
-        #expect(messageData.count == 9 + chunkSize)  // 1 type + 8 timestamp + data
+        #expect(messageData.count == 9 + chunkSize) // 1 type + 8 timestamp + data
     }
 }

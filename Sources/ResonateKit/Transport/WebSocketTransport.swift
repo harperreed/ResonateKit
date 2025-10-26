@@ -13,20 +13,20 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
     init(textContinuation: AsyncStream<String>.Continuation, binaryContinuation: AsyncStream<Data>.Continuation) {
         self.textContinuation = textContinuation
         self.binaryContinuation = binaryContinuation
-        print("[STARSCREAM] Delegate initialized")
+        // Logging disabled for TUI mode
     }
 
-    func didReceive(event: WebSocketEvent, client: any WebSocketClient) {
+    func didReceive(event: WebSocketEvent, client _: any WebSocketClient) {
         // Verbose logging disabled for production - uncomment for debugging
         // print("[STARSCREAM] didReceive called with event: \(event)")
         switch event {
-        case .connected(let headers):
-            print("[STARSCREAM] WebSocket connected with headers: \(headers)")
+        case .connected:
+            // Logging disabled for TUI mode
             connectionContinuation?.resume()
             connectionContinuation = nil
 
-        case .disconnected(let reason, let code):
-            print("[STARSCREAM] WebSocket disconnected: \(reason) (code: \(code))")
+        case .disconnected:
+            // Logging disabled for TUI mode
             // If we were waiting for connection, fail it
             if let continuation = connectionContinuation {
                 continuation.resume(throwing: TransportError.connectionFailed)
@@ -35,31 +35,32 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
             textContinuation.finish()
             binaryContinuation.finish()
 
-        case .text(let string):
+        case let .text(string):
             // High-frequency event - logging disabled
             textContinuation.yield(string)
 
-        case .binary(let data):
+        case let .binary(data):
             // High-frequency event - logging disabled
             binaryContinuation.yield(data)
 
-        case .ping(_):
+        case .ping:
             // High-frequency event - logging disabled
             break
 
-        case .pong(_):
+        case .pong:
             // High-frequency event - logging disabled
             break
 
-        case .viabilityChanged(let isViable):
-            print("[STARSCREAM] Viability changed: \(isViable)")
+        case .viabilityChanged:
+            // Logging disabled for TUI mode
+            break
 
-        case .reconnectSuggested(let shouldReconnect):
-            print("[STARSCREAM] Reconnect suggested: \(shouldReconnect)")
+        case .reconnectSuggested:
+            // Logging disabled for TUI mode
+            break
 
         case .cancelled:
-            print("[STARSCREAM] WebSocket cancelled")
-            // If we were waiting for connection, fail it
+            // Logging disabled for TUI mode
             if let continuation = connectionContinuation {
                 continuation.resume(throwing: TransportError.connectionFailed)
                 connectionContinuation = nil
@@ -67,8 +68,8 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
             textContinuation.finish()
             binaryContinuation.finish()
 
-        case .error(let error):
-            print("[STARSCREAM] WebSocket error: \(String(describing: error))")
+        case .error:
+            // Logging disabled for TUI mode
             if let continuation = connectionContinuation {
                 continuation.resume(throwing: TransportError.connectionFailed)
                 connectionContinuation = nil
@@ -77,8 +78,7 @@ private final class StarscreamDelegate: WebSocketDelegate, @unchecked Sendable {
             binaryContinuation.finish()
 
         case .peerClosed:
-            print("[STARSCREAM] Peer closed connection")
-            // If we were waiting for connection, fail it
+            // Logging disabled for TUI mode
             if let continuation = connectionContinuation {
                 continuation.resume(throwing: TransportError.connectionFailed)
                 connectionContinuation = nil
@@ -115,9 +115,9 @@ public actor WebSocketTransport {
         let (textStream, textCont) = AsyncStream<String>.makeStream()
         let (binaryStream, binaryCont) = AsyncStream<Data>.makeStream()
 
-        self.textMessages = textStream
-        self.binaryMessages = binaryStream
-        self.delegate = StarscreamDelegate(textContinuation: textCont, binaryContinuation: binaryCont)
+        textMessages = textStream
+        binaryMessages = binaryStream
+        delegate = StarscreamDelegate(textContinuation: textCont, binaryContinuation: binaryCont)
     }
 
     /// Connect to the WebSocket server
@@ -137,20 +137,14 @@ public actor WebSocketTransport {
         socket.callbackQueue = DispatchQueue(label: "com.resonate.websocket", qos: .userInitiated)
         socket.delegate = delegate
 
-        print("[TRANSPORT] Delegate set: \(socket.delegate != nil)")
-
-        self.webSocket = socket
-
-        print("[TRANSPORT] Connecting to \(url)...")
+        // Logging disabled for TUI mode
+        webSocket = socket
 
         // Wait for connection to complete
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             delegate.connectionContinuation = continuation
             socket.connect()
-            print("[TRANSPORT] Connection initiated, waiting for connected event...")
         }
-
-        print("[TRANSPORT] Connection established!")
     }
 
     /// Check if currently connected
@@ -170,7 +164,7 @@ public actor WebSocketTransport {
         guard let text = String(data: data, encoding: .utf8) else {
             throw TransportError.encodingFailed
         }
-        print("[TRANSPORT] Sending: \(text)")
+        // Logging disabled for TUI mode
         webSocket.write(string: text)
     }
 

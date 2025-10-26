@@ -1,11 +1,11 @@
-import Testing
-@testable import ResonateKit
 import Foundation
+@testable import ResonateKit
+import Testing
 
 @Suite("WebSocket Transport Tests")
 struct WebSocketTransportTests {
     @Test("Creates AsyncStreams for messages")
-    func testStreamCreation() async {
+    func streamCreation() async {
         let url = URL(string: "ws://localhost:8927/resonate")!
         let transport = WebSocketTransport(url: url)
 

@@ -13,7 +13,7 @@ public struct SchedulerStats: Sendable {
     public let received: Int
     public let played: Int
     public let dropped: Int
-    public let droppedLate: Int  // Frames dropped because they were >50ms late
+    public let droppedLate: Int // Frames dropped because they were >50ms late
     public let droppedOther: Int // Frames dropped due to queue overflow
 
     public init(received: Int = 0, played: Int = 0, dropped: Int = 0, droppedLate: Int = 0, droppedOther: Int = 0) {
@@ -33,7 +33,7 @@ public struct DetailedSchedulerStats: Sendable {
     public let droppedLate: Int
     public let droppedOther: Int
     public let queueSize: Int
-    public let bufferFillMs: Double  // Current buffer fill in milliseconds
+    public let bufferFillMs: Double // Current buffer fill in milliseconds
 
     public init(received: Int = 0, played: Int = 0, dropped: Int = 0, droppedLate: Int = 0, droppedOther: Int = 0, queueSize: Int = 0, bufferFillMs: Double = 0.0) {
         self.received = received
@@ -74,7 +74,7 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
         self.clockSync = clockSync
         self.playbackWindow = playbackWindow
         self.maxQueueSize = maxQueueSize
-        self.schedulerStats = SchedulerStats()
+        schedulerStats = SchedulerStats()
 
         // Create AsyncStream
         (scheduledChunks, chunkContinuation) = AsyncStream.makeStream()
@@ -95,7 +95,7 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
             let delay = playTime.timeIntervalSince(now)
             let delayMs = Int(delay * 1000)
 
-            print("[SCHEDULER] Chunk #\(receivedCount): server_ts=\(serverTimestamp)μs, delay=\(delayMs)ms, queue_size=\(queue.count)")
+            // print("[SCHEDULER] Chunk #\(receivedCount): server_ts=\(serverTimestamp)μs, delay=\(delayMs)ms, queue_size=\(queue.count)")
         }
 
         let chunk = ScheduledChunk(
@@ -114,7 +114,7 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
                 droppedLate: schedulerStats.droppedLate,
                 droppedOther: schedulerStats.droppedOther + 1
             )
-            print("[SCHEDULER] Queue overflow: dropped oldest chunk")
+            // print("[SCHEDULER] Queue overflow: dropped oldest chunk")
         }
 
         // Insert into sorted position
@@ -208,7 +208,7 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
     /// Clear all queued chunks
     public func clear() {
         queue.removeAll()
-        print("[SCHEDULER] Queue cleared")
+        // print("[SCHEDULER] Queue cleared")
     }
 
     /// Check queue and output ready chunks
@@ -234,7 +234,7 @@ public actor AudioScheduler<ClockSync: ClockSyncProtocol> {
 
                 // Log first 10 drops
                 if schedulerStats.droppedLate <= 10 {
-                    print("[SCHEDULER] Dropped late chunk: \(Int(-delay * 1000))ms late")
+                    // print("[SCHEDULER] Dropped late chunk: \(Int(-delay * 1000))ms late")
                 }
             } else {
                 // Ready to play (within ±50ms window)

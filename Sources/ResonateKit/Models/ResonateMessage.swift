@@ -3,7 +3,7 @@
 
 import Foundation
 #if canImport(UIKit)
-import UIKit
+    import UIKit
 #endif
 
 /// Base protocol for all Resonate messages
@@ -70,19 +70,19 @@ public struct DeviceInfo: Codable, Sendable {
 
     public static var current: DeviceInfo {
         #if os(iOS)
-        return DeviceInfo(
-            productName: UIDevice.current.model,
-            manufacturer: "Apple",
-            softwareVersion: UIDevice.current.systemVersion
-        )
+            return DeviceInfo(
+                productName: UIDevice.current.model,
+                manufacturer: "Apple",
+                softwareVersion: UIDevice.current.systemVersion
+            )
         #elseif os(macOS)
-        return DeviceInfo(
-            productName: "Mac",
-            manufacturer: "Apple",
-            softwareVersion: ProcessInfo.processInfo.operatingSystemVersionString
-        )
+            return DeviceInfo(
+                productName: "Mac",
+                manufacturer: "Apple",
+                softwareVersion: ProcessInfo.processInfo.operatingSystemVersionString
+            )
         #else
-        return DeviceInfo(productName: nil, manufacturer: "Apple", softwareVersion: nil)
+            return DeviceInfo(productName: nil, manufacturer: "Apple", softwareVersion: nil)
         #endif
     }
 }
@@ -104,10 +104,10 @@ public struct PlayerSupport: Codable, Sendable {
     public init(supportFormats: [AudioFormatSpec], bufferCapacity: Int, supportedCommands: [PlayerCommand]) {
         self.supportFormats = supportFormats
         // Extract unique values from formats for Music Assistant compatibility
-        self.supportCodecs = Array(Set(supportFormats.map { $0.codec.rawValue })).sorted()
-        self.supportChannels = Array(Set(supportFormats.map { $0.channels })).sorted()
-        self.supportSampleRates = Array(Set(supportFormats.map { $0.sampleRate })).sorted()
-        self.supportBitDepth = Array(Set(supportFormats.map { $0.bitDepth })).sorted()
+        supportCodecs = Array(Set(supportFormats.map { $0.codec.rawValue })).sorted()
+        supportChannels = Array(Set(supportFormats.map { $0.channels })).sorted()
+        supportSampleRates = Array(Set(supportFormats.map { $0.sampleRate })).sorted()
+        supportBitDepth = Array(Set(supportFormats.map { $0.bitDepth })).sorted()
         self.bufferCapacity = bufferCapacity
         self.supportedCommands = supportedCommands
     }
@@ -127,8 +127,8 @@ public struct ArtworkSupport: Codable, Sendable {
     public init() {}
 
     // Explicit Codable implementation for empty struct
-    public init(from decoder: Decoder) throws {}
-    public func encode(to encoder: Encoder) throws {}
+    public init(from _: Decoder) throws {}
+    public func encode(to _: Encoder) throws {}
 }
 
 public struct VisualizerSupport: Codable, Sendable {
@@ -137,8 +137,8 @@ public struct VisualizerSupport: Codable, Sendable {
     public init() {}
 
     // Explicit Codable implementation for empty struct
-    public init(from decoder: Decoder) throws {}
-    public func encode(to encoder: Encoder) throws {}
+    public init(from _: Decoder) throws {}
+    public func encode(to _: Encoder) throws {}
 }
 
 // MARK: - Server Messages
@@ -292,8 +292,8 @@ public struct StreamStartArtwork: Codable, Sendable {
     public init() {}
 
     // Explicit Codable implementation for empty struct
-    public init(from decoder: Decoder) throws {}
-    public func encode(to encoder: Encoder) throws {}
+    public init(from _: Decoder) throws {}
+    public func encode(to _: Encoder) throws {}
 }
 
 public struct StreamStartVisualizer: Codable, Sendable {
@@ -302,8 +302,8 @@ public struct StreamStartVisualizer: Codable, Sendable {
     public init() {}
 
     // Explicit Codable implementation for empty struct
-    public init(from decoder: Decoder) throws {}
-    public func encode(to encoder: Encoder) throws {}
+    public init(from _: Decoder) throws {}
+    public func encode(to _: Encoder) throws {}
 }
 
 /// Stream end message
@@ -389,10 +389,10 @@ public struct SessionMetadata: Codable, Sendable {
     public let album: String?
     public let albumArtist: String?
     public let track: Int?
-    public let trackDuration: Int?  // Duration in seconds (Go sends int, not float64)
+    public let trackDuration: Int? // Duration in seconds (Go sends int, not float64)
     public let year: Int?
     public let playbackSpeed: Double?
-    public let `repeat`: String?  // "off", "track", "all" (Go sends string, not bool)
+    public let `repeat`: String? // "off", "track", "all" (Go sends string, not bool)
     public let shuffle: Bool?
     public let artworkUrl: String?
     public let timestamp: Int64?
@@ -419,7 +419,7 @@ public struct SessionMetadata: Codable, Sendable {
         self.trackDuration = trackDuration
         self.year = year
         self.playbackSpeed = playbackSpeed
-        self.`repeat` = `repeat`
+        self.repeat = `repeat`
         self.shuffle = shuffle
         self.artworkUrl = artworkUrl
         self.timestamp = timestamp

@@ -1,10 +1,10 @@
-import Testing
 @testable import ResonateKit
+import Testing
 
 @Suite("Buffer Manager Tests")
 struct BufferManagerTests {
     @Test("Track buffered chunks and check capacity")
-    func testCapacityTracking() async {
+    func capacityTracking() async {
         let manager = BufferManager(capacity: 1000)
 
         // Initially has capacity
@@ -20,7 +20,7 @@ struct BufferManagerTests {
     }
 
     @Test("Prune consumed chunks")
-    func testPruning() async {
+    func pruning() async {
         let manager = BufferManager(capacity: 1000)
 
         // Add chunks

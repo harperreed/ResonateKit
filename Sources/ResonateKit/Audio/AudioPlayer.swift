@@ -1,9 +1,9 @@
 // ABOUTME: Manages AudioQueue-based audio playback with microsecond-precise synchronization
 // ABOUTME: Handles format setup, chunk decoding, and timestamp-based playback scheduling
 
-import Foundation
 import AudioToolbox
 import AVFoundation
+import Foundation
 
 /// Actor managing synchronized audio playback
 public actor AudioPlayer {
@@ -43,7 +43,7 @@ public actor AudioPlayer {
     /// Start playback with specified format
     public func start(format: AudioFormatSpec, codecHeader: Data?) throws {
         // Don't restart if already playing with same format
-        if _isPlaying && currentFormat == format {
+        if _isPlaying, currentFormat == format {
             return
         }
 
@@ -86,12 +86,12 @@ public actor AudioPlayer {
             throw AudioPlayerError.queueCreationFailed
         }
 
-        self.audioQueue = queue
-        self.currentFormat = format
+        audioQueue = queue
+        currentFormat = format
 
         // Allocate and prime buffers BEFORE starting the queue
-        let bufferSize: UInt32 = 16384  // 16KB per buffer
-        for _ in 0..<3 {  // 3 buffers for smooth playback
+        let bufferSize: UInt32 = 16384 // 16KB per buffer
+        for _ in 0 ..< 3 { // 3 buffers for smooth playback
             var buffer: AudioQueueBufferRef?
             let status = AudioQueueAllocateBuffer(queue, bufferSize, &buffer)
 
@@ -145,7 +145,7 @@ public actor AudioPlayer {
         }
     }
 
-    nonisolated fileprivate func fillBuffer(queue: AudioQueueRef, buffer: AudioQueueBufferRef) {
+    fileprivate nonisolated func fillBuffer(queue: AudioQueueRef, buffer: AudioQueueBufferRef) {
         // Get next PCM data from buffer (AudioScheduler handles timing)
         let pcmData = getNextPCMDataSync()
 
@@ -194,7 +194,7 @@ public actor AudioPlayer {
     public func setMute(_ muted: Bool) {
         guard let queue = audioQueue else { return }
 
-        self.isMuted = muted
+        isMuted = muted
 
         // Set volume to 0 when muted, restore when unmuted
         let effectiveVolume = muted ? 0.0 : currentVolume

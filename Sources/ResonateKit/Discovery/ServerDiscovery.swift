@@ -57,8 +57,8 @@ public actor ServerDiscovery {
         switch state {
         case .ready:
             break
-        case .failed(let error):
-            print("Discovery failed: \(error)")
+        case let .failed(error):
+            // print("Discovery failed: \(error)")
             stopDiscovery()
         case .cancelled:
             break
@@ -69,13 +69,13 @@ public actor ServerDiscovery {
         }
     }
 
-    private func handleBrowseResults(_ results: Set<NWBrowser.Result>, changes: Set<NWBrowser.Result.Change>) {
+    private func handleBrowseResults(_: Set<NWBrowser.Result>, changes: Set<NWBrowser.Result.Change>) {
         for change in changes {
             switch change {
-            case .added(let result):
+            case let .added(result):
                 resolveAndAdd(result)
 
-            case .removed(let result):
+            case let .removed(result):
                 removeServer(for: result)
 
             case .changed(old: _, new: let result, flags: _):
@@ -92,7 +92,7 @@ public actor ServerDiscovery {
     }
 
     private func resolveAndAdd(_ result: NWBrowser.Result) {
-        guard case .service(let name, let type, let domain, let interface) = result.endpoint else {
+        guard case let .service(name, type, domain, interface) = result.endpoint else {
             return
         }
 
@@ -117,15 +117,15 @@ public actor ServerDiscovery {
 
         // Extract hostname and port from connection
         var hostname = "localhost"
-        var port = 8927  // Default Resonate port
+        var port = 8927 // Default Resonate port
 
-        if case .hostPort(let host, let portValue) = connection.currentPath?.remoteEndpoint {
+        if case let .hostPort(host, portValue) = connection.currentPath?.remoteEndpoint {
             switch host {
-            case .name(let hostName, _):
+            case let .name(hostName, _):
                 hostname = hostName
-            case .ipv4(let address):
+            case let .ipv4(address):
                 hostname = address.debugDescription
-            case .ipv6(let address):
+            case let .ipv6(address):
                 hostname = address.debugDescription
             @unknown default:
                 break
@@ -135,9 +135,9 @@ public actor ServerDiscovery {
 
         // Extract TXT record metadata if available
         var metadata: [String: String] = [:]
-        var path = "/resonate"  // Default Resonate endpoint path
+        var path = "/resonate" // Default Resonate endpoint path
 
-        if case .bonjour(let txtRecord) = result.metadata {
+        if case let .bonjour(txtRecord) = result.metadata {
             // TXT record dictionary is [String: String] in newer APIs
             metadata = txtRecord.dictionary
             // Check for custom path in TXT record
@@ -163,7 +163,7 @@ public actor ServerDiscovery {
     }
 
     private func removeServer(for result: NWBrowser.Result) {
-        guard case .service(let name, _, _, _) = result.endpoint else { return }
+        guard case let .service(name, _, _, _) = result.endpoint else { return }
 
         // Remove all servers matching this service name
         let removed = discoveries.filter { $0.value.name == name }

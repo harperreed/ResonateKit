@@ -1,11 +1,11 @@
-import Testing
-@testable import ResonateKit
 import Foundation
+@testable import ResonateKit
+import Testing
 
 @Suite("Stream Message Tests")
 struct StreamMessageTests {
     @Test("Decode stream/start message")
-    func testStreamStartDecoding() throws {
+    func streamStartDecoding() throws {
         let json = """
         {
             "type": "stream/start",

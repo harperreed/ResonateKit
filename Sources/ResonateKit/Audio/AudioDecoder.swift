@@ -1,8 +1,8 @@
 // ABOUTME: Audio decoder for FLAC, Opus, and PCM codecs
 // ABOUTME: Converts compressed audio to PCM for playback (stub for now)
 
-import Foundation
 import AVFoundation
+import Foundation
 
 /// Audio decoder protocol
 public protocol AudioDecoder {
@@ -22,10 +22,10 @@ public class PCMDecoder: AudioDecoder {
 public enum AudioDecoderFactory {
     public static func create(
         codec: AudioCodec,
-        sampleRate: Int,
-        channels: Int,
-        bitDepth: Int,
-        header: Data?
+        sampleRate _: Int,
+        channels _: Int,
+        bitDepth _: Int,
+        header _: Data?
     ) throws -> AudioDecoder {
         switch codec {
         case .pcm:

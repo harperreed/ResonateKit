@@ -27,7 +27,7 @@ final class CLIPlayer {
         // Create player configuration
         // IMPORTANT: Only advertise PCM until Opus/FLAC decoders are implemented
         let config = PlayerConfiguration(
-            bufferCapacity: 2_097_152,  // 2MB buffer
+            bufferCapacity: 2_097_152, // 2MB buffer
             supportedFormats: [
                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
             ]
@@ -77,7 +77,7 @@ final class CLIPlayer {
 
             // Wait forever (sleep in a loop to avoid Duration overflow)
             while true {
-                try? await Task.sleep(for: .seconds(3600))  // 1 hour at a time
+                try? await Task.sleep(for: .seconds(3600)) // 1 hour at a time
             }
         }
     }
@@ -86,14 +86,14 @@ final class CLIPlayer {
     private func monitorEvents(client: ResonateClient, useTUI: Bool) async {
         for await event in client.events {
             switch event {
-            case .serverConnected(let info):
+            case let .serverConnected(info):
                 if useTUI {
                     await display.updateServer(name: info.name)
                 } else {
                     print("[EVENT] Server connected: \(info.name) (v\(info.version))")
                 }
 
-            case .streamStarted(let format):
+            case let .streamStarted(format):
                 let formatStr = "\(format.codec.rawValue) \(format.sampleRate)Hz \(format.channels)ch \(format.bitDepth)bit"
                 if useTUI {
                     await display.updateStream(format: formatStr)
@@ -108,12 +108,12 @@ final class CLIPlayer {
                     print("[EVENT] Stream ended")
                 }
 
-            case .groupUpdated(let info):
+            case let .groupUpdated(info):
                 if !useTUI {
                     print("[EVENT] Group updated: \(info.groupName) (\(info.playbackState ?? "unknown"))")
                 }
 
-            case .metadataReceived(let metadata):
+            case let .metadataReceived(metadata):
                 if useTUI {
                     await display.updateMetadata(
                         title: metadata.title,
@@ -129,17 +129,17 @@ final class CLIPlayer {
                     }
                 }
 
-            case .artworkReceived(let channel, let data):
+            case let .artworkReceived(channel, data):
                 if !useTUI {
                     print("[EVENT] Artwork received on channel \(channel): \(data.count) bytes")
                 }
 
-            case .visualizerData(let data):
+            case let .visualizerData(data):
                 if !useTUI {
                     print("[EVENT] Visualizer data: \(data.count) bytes")
                 }
 
-            case .error(let message):
+            case let .error(message):
                 if !useTUI {
                     print("[ERROR] \(message)")
                 }
@@ -148,7 +148,7 @@ final class CLIPlayer {
     }
 
     @MainActor
-    private func monitorStats(client: ResonateClient) async {
+    private func monitorStats(client _: ResonateClient) async {
         while !Task.isCancelled {
             // Update volume from client
             // Note: Would need to expose these as observable properties
@@ -158,7 +158,7 @@ final class CLIPlayer {
         }
     }
 
-    nonisolated private static func runCommandLoopStatic(client: ResonateClient, display: StatusDisplay) async {
+    private nonisolated static func runCommandLoopStatic(client: ResonateClient, display: StatusDisplay) async {
         while let line = readLine() {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedLine.isEmpty else {
@@ -189,7 +189,7 @@ final class CLIPlayer {
                 await display.updateVolume(100, muted: false)
 
             default:
-                break  // Ignore unknown commands in TUI mode
+                break // Ignore unknown commands in TUI mode
             }
         }
     }
@@ -242,9 +242,9 @@ actor StatusDisplay {
     // State
     private var serverName: String = "Not connected"
     private var streamFormat: String = "No stream"
-    private var trackTitle: String? = nil
-    private var trackArtist: String? = nil
-    private var trackAlbum: String? = nil
+    private var trackTitle: String?
+    private var trackArtist: String?
+    private var trackAlbum: String?
     private var clockOffset: Int64 = 0
     private var clockRTT: Int64 = 0
     private var clockQuality: String = "lost"

@@ -1,16 +1,16 @@
-import Testing
-@testable import ResonateKit
 import Foundation
+@testable import ResonateKit
+import Testing
 
 @Suite("ResonateClient Tests")
 @MainActor
 struct ResonateClientTests {
     @Test("Initialize client with player role")
-    func testInitialization() {
+    func initialization() {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
             ]
         )
 
@@ -26,11 +26,11 @@ struct ResonateClientTests {
     }
 
     @Test("Connect creates transport and starts connecting")
-    func testConnect() async throws {
+    func connect() async throws {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
             ]
         )
 
@@ -48,11 +48,11 @@ struct ResonateClientTests {
     }
 
     @Test("ResonateClient has AudioScheduler after connect")
-    func testClientHasScheduler() async throws {
+    func clientHasScheduler() async throws {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
             ]
         )
 
@@ -73,11 +73,11 @@ struct ResonateClientTests {
     }
 
     @Test("AudioScheduler is cleared on disconnect")
-    func testSchedulerCleanupOnDisconnect() async throws {
+    func schedulerCleanupOnDisconnect() async throws {
         let config = PlayerConfiguration(
             bufferCapacity: 1024,
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
             ]
         )
 

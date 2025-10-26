@@ -1,11 +1,11 @@
-import Testing
-@testable import ResonateKit
 import Foundation
+@testable import ResonateKit
+import Testing
 
 @Suite("Message Encoding Tests")
 struct MessageEncodingTests {
     @Test("ClientHello encodes to snake_case JSON")
-    func testClientHelloEncoding() throws {
+    func clientHelloEncoding() throws {
         let payload = ClientHelloPayload(
             clientId: "test-client",
             name: "Test Client",
@@ -14,7 +14,7 @@ struct MessageEncodingTests {
             supportedRoles: [.player],
             playerSupport: PlayerSupport(
                 supportFormats: [
-                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
+                    AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
                 ],
                 bufferCapacity: 1024,
                 supportedCommands: [.volume, .mute]
@@ -37,7 +37,7 @@ struct MessageEncodingTests {
     }
 
     @Test("ServerHello decodes from snake_case JSON")
-    func testServerHelloDecoding() throws {
+    func serverHelloDecoding() throws {
         let json = """
         {
             "type": "server/hello",

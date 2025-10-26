@@ -1,11 +1,11 @@
-import Testing
 import Foundation
 @testable import ResonateKit
+import Testing
 
 @Suite("AudioPlayer Tests")
 struct AudioPlayerTests {
     @Test("Initialize AudioPlayer with dependencies")
-    func testInitialization() async {
+    func initialization() async {
         let bufferManager = BufferManager(capacity: 1024)
         let clockSync = ClockSynchronizer()
 
@@ -19,7 +19,7 @@ struct AudioPlayerTests {
     }
 
     @Test("Configure audio format")
-    func testFormatSetup() async throws {
+    func formatSetup() async throws {
         let bufferManager = BufferManager(capacity: 1024)
         let clockSync = ClockSynchronizer()
         let player = AudioPlayer(bufferManager: bufferManager, clockSync: clockSync)
@@ -69,7 +69,7 @@ struct AudioPlayerTests {
     }
 
     @Test("Verify old enqueue method removed")
-    func testEnqueueMethodRemoved() async throws {
+    func enqueueMethodRemoved() async throws {
         // This test documents that the old enqueue(chunk:) method has been removed
         // in favor of the AudioScheduler-based architecture.
         // The new flow is: ResonateClient -> AudioScheduler -> AudioPlayer.playPCM()
@@ -92,7 +92,7 @@ struct AudioPlayerTests {
     }
 
     @Test("Decode method still available")
-    func testDecodeMethod() async throws {
+    func decodeMethod() async throws {
         let bufferManager = BufferManager(capacity: 1_048_576)
         let clockSync = ClockSynchronizer()
         let player = AudioPlayer(bufferManager: bufferManager, clockSync: clockSync)
