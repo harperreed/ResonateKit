@@ -29,7 +29,7 @@ final class CLIPlayer {
         let config = PlayerConfiguration(
             bufferCapacity: 2_097_152, // 2MB buffer
             supportedFormats: [
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16)
             ]
         )
 
