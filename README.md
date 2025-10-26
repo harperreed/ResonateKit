@@ -91,6 +91,15 @@ The scheduler converts server timestamps to local playback times and ensures chu
 - **Swift Bring-Up Guide**: See [docs/SWIFT_BRINGUP.md](docs/SWIFT_BRINGUP.md) for codec negotiation, scheduler architecture, clock sync details, and the 5-minute PCM stream test procedure.
 - **Manual Testing**: See [docs/TESTING.md](docs/TESTING.md) for manual testing procedures and validation checklist.
 
+## TODO
+
+- [ ] Verify hi-res audio (192kHz/24-bit) end-to-end with real hardware
+- [ ] Test compatibility with other Resonate Protocol server implementations
+- [ ] Update implementation as Resonate Protocol spec solidifies
+- [ ] Comprehensive audit and bug fixes
+
+See [GitHub Issues](https://github.com/harperreed/ResonateKit/issues) for detailed tracking and discussion.
+
 ## License
 
 Apache 2.0
