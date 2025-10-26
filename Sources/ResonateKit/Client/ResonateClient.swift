@@ -665,10 +665,10 @@ public final class ResonateClient {
         if !isPlaying, !isAutoStarting {
             isAutoStarting = true
 
-            // Use most compatible format (48kHz 16-bit) as fallback for auto-start
-            // Server will send stream/start with actual format if different
-            // We use index 4 (48kHz 16-bit) as it's most universally supported
-            guard let defaultFormat = playerConfig?.supportedFormats.dropFirst(4).first else {
+            // Use highest priority format (first in supportedFormats list) for auto-start
+            // This ensures hi-res formats (192k/24, 96k/24) are preferred over 48k/16
+            // Server will send stream/start with negotiated format if different
+            guard let defaultFormat = playerConfig?.supportedFormats.first else {
                 // print("[CLIENT] ❌ No supported formats configured")
                 isAutoStarting = false
                 return
