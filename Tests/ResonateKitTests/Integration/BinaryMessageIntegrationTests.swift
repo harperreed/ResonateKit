@@ -32,7 +32,7 @@ struct BinaryMessageIntegrationTests {
 
         // Create binary message
         var messageData = Data()
-        messageData.append(0) // Audio chunk type
+        messageData.append(1) // Audio chunk type (server uses type 1)
 
         let timestamp: Int64 = 1_000_000 // 1 second in microseconds
         withUnsafeBytes(of: timestamp.bigEndian) { messageData.append(contentsOf: $0) }
@@ -218,7 +218,7 @@ struct BinaryMessageIntegrationTests {
         let audioData = Data(repeating: 0xAB, count: chunkSize)
 
         var messageData = Data()
-        messageData.append(0) // Audio chunk
+        messageData.append(1) // Audio chunk (server uses type 1)
 
         let timestamp: Int64 = 10_000_000
         withUnsafeBytes(of: timestamp.bigEndian) { messageData.append(contentsOf: $0) }
