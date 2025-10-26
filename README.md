@@ -8,7 +8,7 @@ A Swift client library for the [Resonate Protocol](https://github.com/Resonate-P
 - 🎛️ **Controller Role**: Control playback across device groups
 - 📝 **Metadata Role**: Display track information and progress
 - 🔍 **Auto-discovery**: mDNS/Bonjour server discovery
-- 🎵 **Multi-codec**: PCM support (Opus and FLAC planned)
+- 🎵 **Multi-codec**: PCM, Opus, and FLAC support for flexible streaming
 - ⏱️ **Clock Sync**: NTP-style time synchronization
 
 ## Requirements
@@ -39,8 +39,9 @@ let client = ResonateClient(
     playerConfig: PlayerConfiguration(
         bufferCapacity: 1_048_576, // 1MB
         supportedFormats: [
-            // IMPORTANT: Only advertise PCM until Opus/FLAC decoders are implemented
             AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48000, bitDepth: 16),
+            AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48000, bitDepth: 16),
+            AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 48000, bitDepth: 16),
         ]
     )
 )
@@ -62,6 +63,16 @@ for await server in discovery.discoveredServers {
 // - Audio stream reception
 // - Synchronized playback
 ```
+
+## Codec Support
+
+ResonateKit supports multiple audio codecs for high-quality streaming:
+
+- **PCM** - Uncompressed audio up to 192kHz 32-bit (zero-copy passthrough)
+- **Opus** - Low-latency lossy compression (8-48kHz, optimized for real-time)
+- **FLAC** - Lossless compression with hi-res support (up to 192kHz 24-bit)
+
+All codecs output normalized int32 PCM for consistent pipeline processing. See [docs/CODEC_SUPPORT.md](docs/CODEC_SUPPORT.md) for detailed codec documentation, performance characteristics, and implementation guide.
 
 ## Audio Synchronization
 
