@@ -203,7 +203,6 @@ public class FLACDecoder: AudioDecoder {
     public func decode(_ data: Data) throws -> Data {
         // Append new data to pending buffer
         pendingData.append(data)
-        readOffset = 0
         decodedSamples.removeAll(keepingCapacity: true)
         lastError = nil
 
@@ -212,11 +211,39 @@ public class FLACDecoder: AudioDecoder {
             throw AudioDecoderError.conversionFailed("FLAC decoder not initialized")
         }
 
-        // Process until we've consumed the data or decoded a frame
-        let success = FLAC__stream_decoder_process_single(decoder)
-        guard success != 0 else {
+        // CRITICAL: readOffset tracks decoder's position in pendingData
+        // DON'T reset to 0 - decoder maintains internal state and continues from last position
+        // The readCallback will be called and will read from readOffset
+
+        // Process blocks until we get audio samples
+        // First block is always STREAMINFO metadata, subsequent blocks are audio frames
+        // For complete FLAC files, we need multiple process_single() calls to advance
+        // through metadata blocks to reach audio frames
+        var iterations = 0
+        let startOffset = readOffset
+        while decodedSamples.isEmpty {
+            iterations += 1
+            let success = FLAC__stream_decoder_process_single(decoder)
             let state = FLAC__stream_decoder_get_state(decoder)
-            throw AudioDecoderError.conversionFailed("FLAC frame processing failed: state=\(state)")
+
+            guard success != 0 else {
+                throw AudioDecoderError.conversionFailed("FLAC frame processing failed: state=\(state)")
+            }
+
+            // Check if we've hit end of stream or processed all available data
+            if state == FLAC__STREAM_DECODER_END_OF_STREAM {
+                break
+            }
+
+            // If readOffset didn't advance, we need more data (for streaming use case)
+            if readOffset == startOffset && iterations > 1 {
+                break
+            }
+
+            // Safety limit to prevent infinite loops
+            if iterations > 100 {
+                break
+            }
         }
 
         // Check for errors reported via error callback
@@ -225,7 +252,12 @@ public class FLACDecoder: AudioDecoder {
         }
 
         // Remove consumed bytes from pending buffer to prevent memory leak
-        pendingData.removeFirst(readOffset)
+        // Only remove bytes that were actually read during THIS decode() call
+        let bytesConsumed = readOffset - startOffset
+        if bytesConsumed > 0 {
+            pendingData.removeFirst(bytesConsumed)
+            readOffset = startOffset  // Adjust readOffset to account for removed bytes
+        }
 
         // Return decoded samples as Data
         return decodedSamples.withUnsafeBytes { Data($0) }

@@ -25,7 +25,7 @@ final class CLIPlayer {
         }
 
         // Create player configuration
-        // Advertise PCM-only formats for now (Opus/FLAC decoders implemented but untested)
+        // Advertise support for PCM, Opus, and FLAC formats
         let config = PlayerConfiguration(
             bufferCapacity: 2_097_152, // 2MB buffer
             supportedFormats: [
@@ -36,12 +36,11 @@ final class CLIPlayer {
                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 88_200, bitDepth: 24),
                 // Standard PCM formats (16-bit)
                 AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 48_000, bitDepth: 16),
-                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 44_100, bitDepth: 16)
-                // Compressed formats (Opus and FLAC) - decoders implemented but not yet validated
-                // TODO: Enable after real-world testing with Opus/FLAC streams
-                // AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48_000, bitDepth: 16),
-                // AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 48_000, bitDepth: 16),
-                // AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44_100, bitDepth: 16)
+                AudioFormatSpec(codec: .pcm, channels: 2, sampleRate: 44_100, bitDepth: 16),
+                // Compressed formats - validated and working
+                AudioFormatSpec(codec: .opus, channels: 2, sampleRate: 48_000, bitDepth: 16),
+                AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 48_000, bitDepth: 16),
+                AudioFormatSpec(codec: .flac, channels: 2, sampleRate: 44_100, bitDepth: 16)
             ]
         )
 
