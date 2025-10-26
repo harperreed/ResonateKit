@@ -130,7 +130,8 @@ final class CLIPlayer {
                     await display.updateMetadata(
                         title: metadata.title,
                         artist: metadata.artist,
-                        album: metadata.album
+                        album: metadata.album,
+                        artworkUrl: metadata.artworkUrl
                     )
                 } else {
                     print("[METADATA] Track: \(metadata.title ?? "unknown")")
@@ -138,6 +139,9 @@ final class CLIPlayer {
                     print("[METADATA] Album: \(metadata.album ?? "unknown")")
                     if let duration = metadata.duration {
                         print("[METADATA] Duration: \(duration)s")
+                    }
+                    if let artworkUrl = metadata.artworkUrl {
+                        print("[METADATA] Artwork URL: \(artworkUrl)")
                     }
                 }
 
@@ -257,6 +261,7 @@ actor StatusDisplay {
     private var trackTitle: String?
     private var trackArtist: String?
     private var trackAlbum: String?
+    private var trackArtworkUrl: String?
     private var clockOffset: Int64 = 0
     private var clockRTT: Int64 = 0
     private var clockQuality: String = "lost"
@@ -325,10 +330,11 @@ actor StatusDisplay {
         isMuted = muted
     }
 
-    func updateMetadata(title: String?, artist: String?, album: String?) {
+    func updateMetadata(title: String?, artist: String?, album: String?, artworkUrl: String?) {
         trackTitle = title
         trackArtist = artist
         trackAlbum = album
+        trackArtworkUrl = artworkUrl
     }
 
     private func render() {
@@ -361,6 +367,9 @@ actor StatusDisplay {
         }
         if let album = trackAlbum {
             output += "  Album:   \(album)\n"
+        }
+        if let artworkUrl = trackArtworkUrl {
+            output += "  Artwork: \(ANSI.dim)\(artworkUrl)\(ANSI.reset)\n"
         }
         output += "\n"
 
