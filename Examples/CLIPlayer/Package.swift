@@ -27,6 +27,20 @@ let package = Package(
             dependencies: [
                 .product(name: "ResonateKit", package: "ResonateKit")
             ]
+        ),
+        .executableTarget(
+            name: "OpusTest",
+            dependencies: [
+                .product(name: "ResonateKit", package: "ResonateKit")
+            ],
+            path: "Sources/OpusTest"
+        ),
+        .executableTarget(
+            name: "FLACTest",
+            dependencies: [
+                .product(name: "ResonateKit", package: "ResonateKit")
+            ],
+            path: "Sources/FLACTest"
         )
     ]
 )
