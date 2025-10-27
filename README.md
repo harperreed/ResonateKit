@@ -1,3 +1,5 @@
+> This is a very early proof of concept of the resonate protocol. The protocol will likely change. This does work today (10/26), but may not work tomorrow.
+
 # ResonateKit
 
 A Swift client library for the [Resonate Protocol](https://github.com/Resonate-Protocol/spec) - enabling synchronized multi-room audio playback on Apple platforms.
